@@ -1,7 +1,7 @@
 # PARASITE ECHO — Claude Code 引き継ぎメモ
 
 ユーザー自身のゲーム企画書『PARASITE ECHO』を元に、claude.ai のチャットで作ってきたブラウザゲーム。
-2026-11-15 時点、claude.ai 上で 3D 三人称視点版として公開中（アーティファクト版 `1794725589-df8b`、2026-11-15 生物グラフィック刷新版。URL https://claude.ai/artifact/ER2MxzP3PvcUxe2k6YGts2）。
+2026-11-15 時点、claude.ai 上で 3D 三人称視点版として公開中（アーティファクト版 `1794731204-8f87`、2026-11-15 HUD・マップ改修版。URL https://claude.ai/artifact/ER2MxzP3PvcUxe2k6YGts2）。
 ユーザーとのやりとりは日本語。
 
 ## ゲーム概要
