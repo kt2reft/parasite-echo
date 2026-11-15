@@ -2442,11 +2442,84 @@ const cleanName=s=>String(s||'').replace(/[<>&"'`\u0000-\u001f\u200b-\u200f\u202
 // ================================================================
 function b64(u){let s='';for(let i=0;i<u.length;i++)s+=String.fromCharCode(u[i]);return btoa(s)}
 function unb64(s){const b=atob(s),u=new Uint8Array(b.length);for(let i=0;i<b.length;i++)u[i]=b.charCodeAt(i);return u}
+// ---------------- P2P fallback (outside claude.ai): the same presence-room API over WebRTC.
+// Uses PeerJS (vendor/peerjs.min.js) with its free cloud broker for signalling only;
+// game data flows directly between browsers. The room host is the hub and relays presences.
+// No public room list here: friends join with the 4-letter room code or an invite link (#join=CODE).
+const P2P={pfx:'parasite-echo-v1-',sess:{},
+  ice:{iceServers:[{urls:'stun:stun.l.google.com:19302'},{urls:'stun:stun1.l.google.com:19302'},{urls:'stun:global.stun.twilio.com:3478'}]}};
+const p2pOK=()=>typeof window.Peer==='function'&&typeof RTCPeerConnection!=='undefined';
+// wrap a PeerJS DataConnection
+function p2pLink(conn,onMsg,onState){
+  const L={remote:conn.peer,open:false,conn,send(o){if(L.open)try{conn.send(typeof o==='string'?o:JSON.stringify(o))}catch(e){}},close(){try{conn.close()}catch(e){}}};
+  const down=()=>{if(L.open){L.open=false;onState(L,false)}};
+  conn.on('open',()=>{L.open=true;onState(L,true)});
+  conn.on('data',d=>{let m;try{m=typeof d==='string'?JSON.parse(d):d}catch(_){return}if(m)onMsg(L,m)});
+  conn.on('close',down);conn.on('error',down);
+  return L}
+// one session per room code; the 'pe-' and 'pi-' rooms share it
+function p2pSession(code,host){
+  if(P2P.sess[code])return P2P.sess[code].ready;
+  const hostId=P2P.pfx+code,me=host?hostId:hostId+'-'+Math.random().toString(36).slice(2,10);
+  const X={code,host,me,rooms:{},links:new Map(),conn:false,peer:null};P2P.sess[code]=X;
+  const notify=R=>{for(const h of R.hs.slice())try{h({})}catch(e){}};
+  const room=name=>X.rooms[name]||(X.rooms[name]=p2pRoom(X,name));
+  const fullState=()=>{const out=[];for(const n in X.rooms)for(const [peer,v] of X.rooms[n].map)out.push({t:'p',room:n,peer,pres:v.presence});return out};
+  const onMsg=(L,m)=>{if(m.t==='b'){for(const x of m.a||[])onMsg(L,x);return}
+    if(typeof m.room!=='string'||typeof m.peer!=='string'||m.peer===X.me)return;
+    const R=room(m.room);
+    if(m.t==='p'&&m.pres&&typeof m.pres==='object'){R.put(m.peer,m.pres);if(X.host)R.map.get(m.peer).via=L.remote;notify(R)}
+    else if(m.t==='l'){R.map.delete(m.peer);notify(R)}else return;
+    if(X.host){const s=JSON.stringify(m);for(const o of X.links.values())if(o!==L)o.send(s)}};
+  const onState=(L,up)=>{
+    if(X.host){if(up){L.send({t:'b',a:fullState()});return}
+      X.links.delete(L.remote);L.close();
+      for(const n in X.rooms){const R=X.rooms[n];let ch=false;for(const [peer,v] of R.map)if(v.via===L.remote){R.map.delete(peer);ch=true;for(const o of X.links.values())o.send({t:'l',room:n,peer})}if(ch)notify(R)}}
+    else{X.conn=up;
+      if(!up){for(const n in X.rooms){const R=X.rooms[n];for(const peer of [...R.map.keys()])if(peer!==X.me)R.map.delete(peer);notify(R)}}
+      else for(const n in X.rooms){const v=X.rooms[n].map.get(X.me);if(v)L.send({t:'p',room:n,peer:X.me,pres:v.presence})}}};
+  X.room=room;
+  X.close=()=>{for(const L of X.links.values())L.close();X.links.clear();if(X.peer)try{X.peer.destroy()}catch(e){}delete P2P.sess[code]};
+  X.bcast=m=>{const s=JSON.stringify(m);for(const L of X.links.values())L.send(s)};
+  X.ready=new Promise((res,rej)=>{let done=false;
+    const fail=msg=>{if(done)return;done=true;X.close();rej(new Error(msg))};
+    let pr;try{pr=X.peer=new window.Peer(me,{config:P2P.ice,debug:0})}catch(e){fail('error');return}
+    pr.on('error',e=>{const t=e&&e.type;if(!done)fail(t==='unavailable-id'?'taken':t==='peer-unavailable'?'nohost':'error')});
+    pr.on('disconnected',()=>{try{pr.reconnect()}catch(e){}});   // keep the broker link so late joiners can still find the host
+    pr.on('open',()=>{
+      if(host){X.conn=true;pr.on('connection',c=>{const old=X.links.get(c.peer);if(old)old.close();X.links.set(c.peer,p2pLink(c,onMsg,onState))});done=true;res(X);return}
+      const L=p2pLink(pr.connect(hostId,{reliable:true,serialization:'raw'}),onMsg,(l,up)=>{onState(l,up);if(up&&!done){done=true;res(X)}});X.links.set(hostId,L)});
+    setTimeout(()=>fail('timeout'),15000)});
+  return X.ready}
+function p2pRoom(X,name){
+  const R={map:new Map(),hs:[],recs:new Map(),mine:{}};
+  R.put=(peer,pres)=>{R.map.set(peer,Object.assign(R.map.get(peer)||{},{presence:Object.freeze(Object.assign({},pres)),t:Date.now()}))};
+  R.put(X.me,{});
+  R.api={name,p2p:true,
+    presence(patch){const m=Object.assign({},R.mine,patch);for(const k in patch)if(patch[k]===null)delete m[k];R.mine=m;R.put(X.me,m);
+      X.bcast({t:'p',room:name,peer:X.me,pres:m});for(const h of R.hs.slice())try{h({})}catch(e){}return Promise.resolve()},
+    peers(){const out=[];for(const [peer,v] of R.map){let r=R.recs.get(peer);
+        if(!r||r.presence!==v.presence){r=Object.freeze({peer,by:null,isMe:peer===X.me,sameTab:peer===X.me,kind:'viewer',guest:false,presence:v.presence,updatedAt:v.t});R.recs.set(peer,r)}out.push(r)}return out},
+    onPeers(h){R.hs.push(h);setTimeout(()=>h({}),0);return()=>{const i=R.hs.indexOf(h);if(i>=0)R.hs.splice(i,1)}},
+    onConnection(h){setTimeout(()=>h(X.conn),0);return()=>{}},connected:()=>X.conn,on(){return()=>{}},emit(){return Promise.resolve()},
+    leave(){X.bcast({t:'l',room:name,peer:X.me});delete X.rooms[name];if(!Object.keys(X.rooms).length)setTimeout(()=>X.close(),300);return Promise.resolve()}};
+  return R}
+// the lobby-level API (no network until a room is joined)
+function p2pLobby(){
+  const me={presence:Object.freeze({}),peer:'me',isMe:true,sameTab:true,kind:'viewer'},hs=[];
+  return{p2p:true,
+    presence(patch){const m=Object.assign({},me.presence,patch);for(const k in patch)if(patch[k]===null)delete m[k];me.presence=Object.freeze(m);return Promise.resolve()},
+    peers:()=>[Object.freeze(Object.assign({},me))],onPeers(h){hs.push(h);return()=>{}},onConnection(h){setTimeout(()=>h(typeof RTCPeerConnection!=='undefined'),0);return()=>{}},
+    connected:()=>true,on(){return()=>{}},emit(){return Promise.resolve()},
+    async join(name,opt){const code=String(name).replace(/^p[ei]-/,'');const X=await p2pSession(code,!!(opt&&opt.host));return X.room(name).api}}}
 async function netConnect(){
   if(NET.api)return NET.api;
   NET.status='connecting';renderLobby();
-  for(let i=0;i<40&&!(window.claude&&window.claude.use);i++)await new Promise(r=>setTimeout(r,250));
-  if(!(window.claude&&window.claude.use)){NET.status='unavailable';renderLobby();return null}
+  const onClaude=/claude/i.test(location.hostname)||window.claude;
+  for(let i=0;i<(onClaude?40:0)&&!(window.claude&&window.claude.use);i++)await new Promise(r=>setTimeout(r,250));
+  if(!(window.claude&&window.claude.use)){
+    if(!p2pOK()){NET.status='unavailable';renderLobby();return null}
+    NET.api=p2pLobby();NET.p2p=true;NET.status='ok';NET.connected=true;renderLobby();return NET.api}
   try{const r=await window.claude.use('room');
     if(!r){NET.status='unavailable';renderLobby();return null}
     NET.api=r;NET.status='ok';
@@ -2460,11 +2533,14 @@ function lobbyRooms(){if(!NET.api)return[];return NET.api.peers().filter(p=>!p.s
 function renderLobby(){
   if(!$('lobby').classList.contains('on')&&!$('roomscr').classList.contains('on'))return;
   const st=$('netStatus');
-  st.textContent=NET.status==='ok'?(NET.connected?'● 接続中':'… 接続しています'):NET.status==='connecting'?'… 接続しています':'オンライン機能に接続できません。claude.ai にログインした状態で、共有されたこのページを開いてください。';
+  st.textContent=NET.status==='ok'?(NET.p2p?'● 準備OK（ルームを作るか、コードで参加）':NET.connected?'● 接続中':'… 接続しています'):NET.status==='connecting'?'… 接続しています':'このブラウザではオンライン機能を使えません。';
+  $('p2pJoin').style.display=NET.p2p?'block':'none';
+  $('lobbyNote').innerHTML=NET.p2p?'友だちにルームコード（または招待リンク）を伝えて参加してもらいます。<br>回線の相性によっては繋がらないことがあります。':'このページを同時に開いている人のルームが表示されます。<br>友だちを招くには、このページを共有してください（claude.ai へのログインが必要です）。';
   st.style.color=NET.status==='ok'&&NET.connected?'#9cf59c':NET.status==='unavailable'?'#ff9a8a':'#cdb8ee';
   $('bCreate').disabled=$('bCreateCoop').disabled=!(NET.status==='ok');
   const box=$('roomList');box.innerHTML='';
   const rooms=lobbyRooms();
+  box.style.display=NET.p2p?'none':'block';
   if(!rooms.length){const d=document.createElement('div');d.style.color='#9a90ab';d.textContent=NET.status==='ok'?'公開中のルームはまだありません。ルームを作って友だちを待ちましょう。':'—';box.appendChild(d)}
   for(const p of rooms){const pr=p.presence;const b=document.createElement('button');b.className='btn sub room-item';b.style.display='block';b.style.width='100%';
     b.textContent=`${pr.k==='coop'?'【協力】':'【対戦】'}${cleanName(pr.nm)} のルーム　${Math.min(6,pr.n|0)}/6人　${pr.ph==='play'?'対戦中（途中参加可）':pr.ph==='end'?'結果発表中':'待機中'}`;
@@ -2474,6 +2550,8 @@ function renderLobby(){
 function renderRoom(){
   const r=NET.sync;if(!r)return;
   $('roomCode').textContent=NET.code.toUpperCase();
+  const inv=$('invite');inv.style.display=NET.p2p&&NET.role==='host'?'block':'none';
+  if(NET.p2p)$('inviteUrl').value=location.href.split('#')[0]+'#join='+NET.code;
   const box=$('memberList');box.innerHTML='';
   const peers=r.peers().filter(p=>p.presence&&p.presence.app==='pe1');
   for(const p of peers){const d=document.createElement('div');d.textContent=`${p.presence.role==='host'?'👑 ':'・'}${cleanName(p.presence.nm)}${p.sameTab?'（あなた）':''}`;box.appendChild(d)}
@@ -2485,8 +2563,12 @@ function renderRoom(){
 }
 async function createRoom(kind){
   const api=await netConnect();if(!api)return;
-  NET.code=Math.random().toString(36).slice(2,6);NET.role='host';NET.kind=kind||'race';MATCH.kind=NET.kind;
-  try{NET.sync=await api.join('pe-'+NET.code);NET.info=await api.join('pi-'+NET.code)}catch(e){toast('ルームを作れませんでした','時間をおいて試してください');NET.role=null;return}
+  NET.role='host';NET.kind=kind||'race';MATCH.kind=NET.kind;
+  if(NET.p2p)$('netStatus').textContent='… ルームを準備しています';
+  let ok=false;
+  for(let tries=0;tries<3&&!ok;tries++){NET.code=Math.random().toString(36).slice(2,6).replace(/[^a-z0-9]/g,'x');
+    try{NET.sync=await api.join('pe-'+NET.code,{host:true});NET.info=await api.join('pi-'+NET.code,{host:true});ok=true}catch(e){if(!(e&&e.message==='taken'))break}}
+  if(!ok){toast('ルームを作れませんでした',NET.p2p?'通信サーバーに繋がりません。時間をおいて試してください':'時間をおいて試してください');NET.role=null;renderLobby();return}
   NET.remote.clear();MATCH.phase='wait';MATCH.mode='host';
   NET.sync.presence({app:'pe1',role:'host',nm:NET.name,code:NET.code,ph:'wait',k:NET.kind}).catch(()=>{});
   api.presence({app:'pe1',nm:NET.name,mode:'host',code:NET.code,n:1,ph:'wait',k:NET.kind}).catch(()=>{});
@@ -2496,7 +2578,9 @@ async function createRoom(kind){
 async function joinRoom(code){
   const api=await netConnect();if(!api||!code)return;
   NET.code=code;NET.role='cli';
-  try{NET.sync=await api.join('pe-'+code);NET.info=await api.join('pi-'+code)}catch(e){toast('ルームに入れませんでした','');NET.role=null;return}
+  if(NET.p2p)$('netStatus').textContent='… ルーム '+code.toUpperCase()+' に接続しています';
+  try{NET.sync=await api.join('pe-'+code);NET.info=await api.join('pi-'+code)}
+  catch(e){toast('ルームに入れませんでした',NET.p2p?(e&&e.message==='nohost'?'そのコードのルームが見つかりません':'接続できませんでした（回線の相性で繋がらないことがあります）'):'');NET.role=null;renderLobby();return}
   NET.cnt={a:0,s:0,cy:0,sl:0,sli:-1,tc:0,tci:-1};NET.seed=0;NET.hostSeen=performance.now();NET.lastSnapObj=null;NET.lastInfoObj=null;
   NET.sync.presence({app:'pe1',role:'cli',nm:NET.name,in:[0,0,0,0,0,0,0,0,-1],tc:[0,-1]}).catch(()=>{});
   api.presence({app:'pe1',nm:NET.name,mode:'cli',code}).catch(()=>{});
@@ -2795,6 +2879,10 @@ $('bSoloCoop').onclick=()=>{sfx('ui');startSolo('coop')};
 $('bLobbyBack').onclick=()=>{show('lobby',false);toTitle()};
 $('bBegin').onclick=()=>{if(NET.role==='host')startHostMatch(NET.kind)};
 $('bLeave').onclick=()=>{leaveRoom();show('roomscr',false);toLobby()};
+const doJoinCode=()=>{const c=$('joinCode').value.toLowerCase().replace(/[^a-z0-9]/g,'').slice(0,4);if(c.length<4){toast('4文字のルームコードを入れてください','');return}saveName();joinRoom(c)};
+$('bJoinCode').onclick=doJoinCode;
+$('joinCode').addEventListener('keydown',e=>{e.stopPropagation();if(e.key==='Enter')doJoinCode()});
+$('bCopyInvite').onclick=()=>{const i=$('inviteUrl');i.select();try{navigator.clipboard.writeText(i.value).then(()=>toast('招待リンクをコピーしました',''),()=>document.execCommand('copy'))}catch(e){document.execCommand('copy')}};
 $('nick').addEventListener('change',saveName);$('nick').addEventListener('keydown',e=>e.stopPropagation());
 $('bHelp').onclick=()=>{show('title',false);show('help',true);$('help').dataset.back='title'};
 $('bHelp2').onclick=()=>{show('pause',false);show('help',true);$('help').dataset.back='pause'};
@@ -2961,5 +3049,8 @@ function boot(){
   gameState='title';$('loading').style.display='none';
   requestAnimationFrame(t=>{lastT=t;frame(t)});
   netConnect();
+  // invite link: #join=CODE opens the lobby and joins that room
+  const jm=/join=([a-z0-9]{4})/i.exec(location.hash);
+  if(jm){try{history.replaceState(null,'',location.href.split('#')[0])}catch(e){}setTimeout(()=>{auInit();toLobby();$('joinCode').value=jm[1].toUpperCase();joinRoom(jm[1].toLowerCase())},300)}
 }
 setTimeout(boot,30);

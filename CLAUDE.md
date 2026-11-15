@@ -17,6 +17,7 @@
 src/index.html      HTML/CSS/UI（three.js と game.js を <script src> で読む → そのままブラウザで開いて開発できる）
 src/game.js         ゲーム本体（シミュレーション・3D描画・音・ネット・UI すべて、約2700行）
 vendor/three.min.js three.js r160（改変なし）
+vendor/peerjs.min.js PeerJS 1.5.4（MIT、source-map 行のみ削除）— claude.ai 以外でのオンライン用
 tools/build.mjs     src + vendor → dist/index.html（1ファイルに全部インライン）
 dist/index.html     公開用の単一ファイル（claude.ai アーティファクトにこれを載せている）
 tests/smoke.mjs     ヘッドレス起動テスト（Playwright）
@@ -42,7 +43,7 @@ archive/parasite-echo-2d-final.html  3D化直前の 2D 見下ろし版（参考�
 | `r3Camera` | 三人称オービットカメラ。右ドラッグ／矢印／右スティックで回転、ホイールでズーム、横移動中は自動で背後に回り込む |
 | AUDIO / ADAPTIVE BGM | 効果音と、状態・種族で変わる自作BGM（すべて WebAudio で合成） |
 | INPUT | `pollInput()`。移動はカメラ基準に変換して `IN.mx/IN.my` へ |
-| NETWORK | ホスト権威型。claude.ai アーティファクトの `room` 機能（`window.claude.use('room')`）を使用。同期部屋 `pe-<code>`（スナップショット）と情報部屋 `pi-<code>` |
+| NETWORK | ホスト権威型。claude.ai アーティファクトの `room` 機能（`window.claude.use('room')`）を使用。同期部屋 `pe-<code>`（スナップショット）と情報部屋 `pi-<code>`。claude.ai 以外（GitHub Pages 等）では `p2pLobby()` が同じ presence API を PeerJS（WebRTC、シグナリングは 0.peerjs.com の無料サーバー）で代替：ホストの Peer ID は `parasite-echo-v1-<code>`、ホストがハブとして presence を中継。公開ルーム一覧は無く、4文字コード入力か招待リンク `#join=<code>` で参加。TURN 無しなので回線の組み合わせによっては繋がらない |
 | FIELD MAP | 霧の晴れる探索マップ、ミニマップ、全体マップ（N キー） |
 | MAIN LOOP / BOOT | `loop()`、`boot()` |
 
@@ -65,7 +66,8 @@ archive/parasite-echo-2d-final.html  3D化直前の 2D 見下ろし版（参考�
 6. BGM（陽気が基本、状態で変化、種族ごとのアレンジ）
 7. 種族技の動的エフェクト、フィールド4倍、マップ機能
 8. 2D見下ろし → 3D三人称視点に変更
-10. **生物グラフィック刷新（最新）**：ポリゴン感を消す彫刻パス（`M_soften`）、柔らかい光の回り込み・毛並み/皮膚のまだら・濡れたツヤ・空の縁光、生物の輪郭線を細く色付きに
+11. **Claude なしでもオンライン（最新）**：claude.ai の外では PeerJS による P2P に自動で切り替え。ルームコード参加・招待リンク
+10. 生物グラフィック刷新：ポリゴン感を消す彫刻パス（`M_soften`）、柔らかい光の回り込み・毛並み/皮膚のまだら・濡れたツヤ・空の縁光、生物の輪郭線を細く色付きに
 9. グラフィック強化（ブレワイ風の「生きている世界」）：風の波・樹冠のふんわり化と揺れ・雲の影・空気遠近・ブルーム/グレア・呼吸・環境生物。RTX 3080 Ti で旧版と同シード比較し描画時間の差は誤差範囲（約3ms/フレーム）
 
 ## ローカル環境メモ
@@ -79,6 +81,6 @@ archive/parasite-echo-2d-final.html  3D化直前の 2D 見下ろし版（参考�
 - 3D化に合わせて、地形の起伏（崖・高台）をゲームプレイに使う余地がある（現状は見た目のみ）。
 
 ## 公開
-- GitHub：https://github.com/kt2reft/parasite-echo （Public、ライセンスなし）。`main` へ push すると GitHub Actions（`.github/workflows/pages.yml`）がビルドして GitHub Pages https://kt2reft.github.io/parasite-echo/ に公開。Pages 版ではオンラインモードは使えない（claude.ai の room 機能が無いため「利用不可」表示）。コミットの名義は `kt2reft` / GitHub の noreply メール。
+- GitHub：https://github.com/kt2reft/parasite-echo （Public、ライセンスなし）。`main` へ push すると GitHub Actions（`.github/workflows/pages.yml`）がビルドして GitHub Pages https://kt2reft.github.io/parasite-echo/ に公開。Pages 版でもオンラインは P2P（PeerJS）で遊べる（Claude アカウント不要。ルームコード／招待リンクで参加）。コミットの名義は `kt2reft` / GitHub の noreply メール。
 - claude.ai のアーティファクト（slug `6ca17dfa-0669-428f-b336-6fbce9923929`、現在ウェブ公開中）。
 - 更新するときは `dist/index.html` を差し替える。公開中なので、更新はリンクを持つ全員にすぐ反映される点に注意。

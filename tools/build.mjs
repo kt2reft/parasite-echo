@@ -13,6 +13,7 @@ const inline = (tag, file) => {
   html = html.replace(tag, () => '<script>' + code + '</script>');
 };
 inline('<script src="../vendor/three.min.js"></script>', 'vendor/three.min.js');
+inline('<script src="../vendor/peerjs.min.js"></script>', 'vendor/peerjs.min.js');
 inline('<script src="game.js"></script>', 'src/game.js');
 mkdirSync(join(root, 'dist'), { recursive: true });
 writeFileSync(join(root, 'dist/index.html'), html);

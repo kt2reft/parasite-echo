@@ -197,15 +197,21 @@ body.touch #obj{max-width:52vw}
     <label>あなたの名前 <input id="nick" maxlength="10" autocomplete="off"></label>
     <div id="netStatus" style="margin-top:6px;font-size:12px"></div></div>
   <div id="roomList" class="card" style="max-width:460px;margin:0 auto 10px;text-align:left;min-height:54px"></div>
+  <div id="p2pJoin" class="card" style="max-width:460px;margin:0 auto 10px;text-align:left;display:none">
+    <label>ルームコードで参加 <input id="joinCode" maxlength="4" autocomplete="off" placeholder="例: AB12" style="font:inherit;font-size:15px;width:6em;text-transform:uppercase;background:#fffaf0;color:#2a3a4a;border:2px solid #e8c56a;border-radius:10px;padding:5px 10px;user-select:text;-webkit-user-select:text"></label>
+    <button class="btn sub" id="bJoinCode" style="font-size:13px;padding:6px 16px">参加する</button></div>
   <button class="btn" id="bCreate">対戦ルームを作る</button>
   <button class="btn green" id="bCreateCoop">協力ルームを作る</button><br>
   <button class="btn sub" id="bLobbyBack" data-back>もどる</button>
-  <div style="font-size:11px;color:#9a90ab;margin-top:12px;line-height:1.6">このページを同時に開いている人のルームが表示されます。<br>友だちを招くには、このページを共有してください（claude.ai へのログインが必要です）。</div>
+  <div id="lobbyNote" style="font-size:11px;color:#9a90ab;margin-top:12px;line-height:1.6"></div>
 </div></div>
 
 <div class="screen" id="roomscr"><div class="panel">
   <div class="logo" style="font-size:26px">ルーム <span id="roomCode"></span></div>
   <div id="roomKind" style="color:#ffcf80;font-size:13px;margin-top:6px"></div>
+  <div id="invite" class="card" style="max-width:460px;margin:10px auto 0;text-align:left;font-size:12px;display:none">友だちにこのコードか招待リンクを送ってください
+    <div style="display:flex;gap:6px;margin-top:4px"><input id="inviteUrl" readonly style="flex:1;font:inherit;font-size:11px;background:#fffaf0;color:#2a3a4a;border:2px solid #e8c56a;border-radius:8px;padding:4px 6px;user-select:text;-webkit-user-select:text">
+    <button class="btn sub" id="bCopyInvite" style="font-size:12px;padding:4px 12px;margin:0">コピー</button></div></div>
   <div id="memberList" class="card" style="max-width:380px;margin:12px auto;text-align:left;font-size:14px;line-height:1.8;min-height:60px"></div>
   <div id="roomMsg" style="color:#d6c6ef;font-size:13px;margin-bottom:10px"></div>
   <button class="btn" id="bBegin">開始する</button>
@@ -255,6 +261,7 @@ body.touch #obj{max-width:52vw}
 <div id="loading">生態系を生成中…</div>
 
 <script src="../vendor/three.min.js"></script>
+<script src="../vendor/peerjs.min.js"></script>
 <script src="game.js"></script>
 </body>
 </html>
