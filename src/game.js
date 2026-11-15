@@ -440,7 +440,7 @@ function buildCGrid(){if(cgrid.length!==OGW*OGW){cgrid=Array.from({length:OGW*OG
   for(const f of foods){const k=clamp((f.y/OG)|0,0,OGW-1)*OGW+clamp((f.x/OG)|0,0,OGW-1);if(!fgrid[k].length)fgDirty.push(k);fgrid[k].push(f)}}
 function nearestFood(c,r){let best=null,bd=r*r;const i0=clamp(((c.x-r)/OG)|0,0,OGW-1),i1=clamp(((c.x+r)/OG)|0,0,OGW-1),j0=clamp(((c.y-r)/OG)|0,0,OGW-1),j1=clamp(((c.y+r)/OG)|0,0,OGW-1);
   for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++)for(const f of fgrid[j*OGW+i]){const dx=f.x-c.x,dy=f.y-c.y,d=dx*dx+dy*dy;if(d<bd&&canEnter(c,biomeAt(f.x,f.y))){bd=d;best=f}}return best}
-function query(x,y,r,cb){const i0=clamp(((x-r)/OG)|0,0,OGW-1),i1=clamp(((x+r)/OG)|0,0,OGW-1),j0=clamp(((y-r)/OG)|0,0,OGW-1),j1=clamp(((y+r)/OG)|0,0,OGW-1);const r2=r*r;
+function query(x,y,r,cb){if(!cgrid.length)return;const i0=clamp(((x-r)/OG)|0,0,OGW-1),i1=clamp(((x+r)/OG)|0,0,OGW-1),j0=clamp(((y-r)/OG)|0,0,OGW-1),j1=clamp(((y+r)/OG)|0,0,OGW-1);const r2=r*r;
   for(let j=j0;j<=j1;j++)for(let i=i0;i<=i1;i++){const cell=cgrid[j*OGW+i];for(let k=0;k<cell.length;k++){const o=cell[k];const dx=o.x-x,dy=o.y-y;if(dx*dx+dy*dy<=r2)cb(o,Math.sqrt(dx*dx+dy*dy))}}}
 
 // ================================================================
@@ -1085,6 +1085,11 @@ function playerBite(pl,c){
 function nearestHostable(c){let best=null,bd=1e9;query(c.x,c.y,c.r+24,(o,d)=>{if(o===c||o.dead||o.rival||o.pl||o.feral||o.sp.tier<1||o.sp.tier>2)return;if(d<c.r+o.r+4&&d<bd){bd=d;best=o}});return best}
 function swallowTarget(c){let best=null,bd=1e9;query(c.x,c.y,c.r+30,(o,d)=>{if(!canEat(c,o)||o.hiddenT>0||(MATCH.kind==='coop'&&o.pl))return;if(isFlying(o)&&!isFlying(c))return;
   if(!(o.hp/o.maxhp<=.45||o.sp.tier<=c.sp.tier-2||o.stage===0||o.key==='larva'))return;if(d<c.r+o.r+6&&d<bd){bd=d;best=o}});return best}
+// can `me` (the local player's body) breed with `o` right now? Same rules as courtPartner, minus the distance.
+// Used for the pink "mate aura" and the heart markers on the map.
+function mateSelf(){const c=P.c;return gameState==='play'&&c&&!c.dead&&c.key!=='larva'&&c.stage===1?c:null}
+function mateAllyIds(){if(MATCH.mode!=='client'||!NET.pp)return null;const s=mateAllyIds.s||(mateAllyIds.s=new Set());s.clear();for(const p of NET.pp)s.add(p[0]);return s}
+function isMate(me,o,ally){return o!==me&&!o.dead&&o.key===me.key&&o.sex!==me.sex&&o.stage===1&&!o.feral&&!o.pl&&!o.threat&&!(o.hiddenT>0)&&!(ally&&ally.has(o.id))}
 function courtPartner(c){let best=null,bd=1e9;query(c.x,c.y,c.r*2+30,(o,d)=>{if(o===c||o.dead||o.pl||o.key!==c.key||o.sex===c.sex||o.feral||o.stage!==1||o.threat)return;if(d<c.r+o.r+14&&d<bd){bd=d;best=o}});return best}
 function swallow(pl,c,t){
   pl.idleT=0;
@@ -1828,6 +1833,7 @@ function creatureY(c,gh){
   return gh}
 function r3Creatures(fx,fy,night){
   const RV=Math.min(560,U3.uFog.value.y*.86),RV2=RV*RV,pc=P.c,obs=IN.obs,cx=CAM3.px,cy=CAM3.pz;
+  const mate=mateSelf(),allyIds=mate&&mateAllyIds();
   // grass parting: the player plus the nearest grounded creatures (shader takes 8)
   const PU=U3.uPush.value,pr=R3.pushC||(R3.pushC=[]);pr.length=0;
   BREATH=1;
@@ -1852,6 +1858,13 @@ function r3Creatures(fx,fy,night){
     if(!sub&&!hidden){const alt=fly?c.alt*1.5:0,k=Math.max(.35,1-alt/110);qFlat(c.x,c.y,c.r*1.25*k*(sp.seg?.8:1),.02,.05,.1,(fly?.22:.34)*(1-night*.4),Q_SHADOW,0,0,0,.14)}
     if(c.feral){qFlat(c.x,c.y,c.r+4,1,.2,.15,.6,Q_RING,.08,.5);qBill(c.x+Math.cos(c.ang)*c.r*.9,y+c.r*(MODEL_H[c.key]||1)*.7,c.y+Math.sin(c.ang)*c.r*.9,c.r*.5,1,.15,.1,.8,Q_GLOW,1)}
     if(c.rival&&obs){const pu=.5+.3*Math.sin(worldT*6);qFlat(c.x,c.y,c.r+5,.8,.45,1,pu,Q_RING,.1,.6)}
+    // mate aura: a mature partner of the opposite sex glows pink, with a ripple and a floating heart
+    if(mate&&isMate(mate,c,allyIds)){const pu=.5+.5*Math.sin(worldT*4+c.id),near=Math.hypot(c.x-mate.x,c.y-mate.y)<c.r+mate.r+14,k=near?1.4:1,H=c.r*(MODEL_H[c.key]||1),w=(worldT*.7+c.id*.137)%1;
+      qFlat(c.x,c.y,c.r*2.4+12,1,.25,.62,(.28+.12*pu)*k,Q_GLOW,0,1);
+      qFlat(c.x,c.y,c.r+5+pu*2,1,.3,.66,.8+.2*pu,Q_RING,.12,.3);
+      qFlat(c.x,c.y,(c.r+5)*(1+w*1.1),1,.42,.74,.85*(1-w),Q_RING,.07,.3);
+      qBill(c.x,y+H*.55,c.y,c.r*2.8+5,1,.42,.78,(.15+.08*pu)*k,Q_GLOW,1);
+      for(let i=0;i<2;i++){const an=worldT*1.8+i*Math.PI+c.id,rr=c.r+3;qBill(c.x+Math.cos(an)*rr,y+H*(.35+.4*((worldT*.5+i*.5)%1)),c.y+Math.sin(an)*rr,1.3+c.r*.06,1,.75,.9,.85,Q_STAR,.8,an)}}
     if(c.stun>0){const hy=y+c.r*((MODEL_H[c.key]||1)+.35),rr=c.r*.7+2;for(let i=0;i<3;i++){const an=worldT*6+i/3*TAU;qBill(c.x+Math.cos(an)*rr,hy+Math.sin(an*2)*.4,c.y+Math.sin(an)*rr,1.6+c.r*.08,1,.9,.4,1,Q_STAR,.5,an)}}
     if(c.key==='eel')qBill(c.x,y+c.r*.5,c.y,c.r*1.6,.5,.8,1,.16+.08*Math.sin(worldT*9+c.id),Q_GLOW,1);
   }
@@ -1994,7 +2007,7 @@ function renderUI(){
     const danger=canEat(o,pc),food=canEat(pc,o),tx=`${o.feral?'【野良】':''}${o.sp.name}${sex}${st}${o.rival?' ?':''}`;
     u.fillStyle=danger?'#ff6a6a':food?'#7ff08a':'#ffffff';u.lineWidth=3;u.strokeStyle='rgba(20,30,45,.85)';u.strokeText(tx,sx,sy);u.fillText(tx,sx,sy)})}
   else if(pc.stage===1&&pc.key!=='larva'){u.font="800 15px 'M PLUS Rounded 1c', sans-serif";query(pc.x,pc.y,150,o=>{if(o===pc||o.dead||o.key!==pc.key||o.sex===pc.sex||o.stage!==1||o.feral)return;const [sx,sy,ok]=toS3(o.x,top(o)+1,o.y);if(!ok)return;
-      u.lineWidth=3;u.strokeStyle='rgba(60,10,40,.8)';u.strokeText(o.sex?'♀':'♂',sx,sy);u.fillStyle='#ff9ec8';u.fillText(o.sex?'♀':'♂',sx,sy)})}
+      const tx='♥'+(o.sex?'♀':'♂');u.lineWidth=3;u.strokeStyle='rgba(60,10,40,.8)';u.strokeText(tx,sx,sy);u.fillStyle='#ff9ec8';u.fillText(tx,sx,sy)})}
   // hold progress
   const holds=[];
   if(P.holdKind&&P.holdT>0){const need={infect:.9,swallow:.55,court:2.1}[P.holdKind];holds.push([P.holdT/need,{infect:'#c88cff',swallow:'#ffcf6a',court:'#ff9ec8'}[P.holdKind]])}
@@ -2366,7 +2379,7 @@ function pollInput(){
 //  HUD (HTML)
 // ================================================================
 const $=id=>document.getElementById(id);
-let toastT=0,lastObj='',lastHint='',hudOn=false;
+let toastT=0,lastObj='',lastHint='',lastStats='';
 function toast(t,s){const el=$('toast');el.innerHTML=(t?`<div>${t}</div>`:'')+(s?`<small>${s}</small>`:'');el.style.opacity=1;toastT=3.2}
 function logEco(t,cls){const el=$('log');const d=document.createElement('div');d.textContent=t;if(cls==='feral')d.style.color='#ff9a8a';el.prepend(d);while(el.children.length>4)el.lastChild.remove();setTimeout(()=>{d.style.opacity=0},7000);setTimeout(()=>d.remove(),8400)}
 function show(id,on){$(id).classList.toggle('on',on)}
@@ -2384,7 +2397,7 @@ function slotHtml(t,innate,sel,i){const T_=TRAITS[t];return `<div class="slot ${
 function updateHUD(dt){
   if(toastT>0){toastT-=dt;if(toastT<=0)$('toast').style.opacity=0}
   renderRank.t=(renderRank.t||0)-dt;if(renderRank.t<=0){renderRank.t=.4;renderRank()}
-  const c=P.c;if(gameState==='play'&&!c&&P.respawnT>0){const o=`<b>完全ロスト</b> — ${P.respawnT|0}秒後に新たな幼生として再出発する`;if(o!==lastObj){$('obj').innerHTML=o;lastObj=o}return}
+  const c=P.c;updateStats(c);if(gameState==='play'&&!c&&P.respawnT>0){const o=`<b>完全ロスト</b> — ${P.respawnT|0}秒後に新たな幼生として再出発する`;if(o!==lastObj){$('obj').innerHTML=o;lastObj=o}return}
   if(gameState!=='play'||!c){if(lastObj){$('obj').innerHTML='';$('hint').innerHTML='';lastObj='';lastHint=''}return}
   const B=BTN[IN.mode]||BTN.kb;
   // objective
@@ -2407,8 +2420,9 @@ function updateHUD(dt){
     else if(P.adr>=100)hs.push(['gold','アドレナリン臨界 — 捕食者に身を委ねよ']);
     else if(P.threat&&!P.hint.big){hs.push(['warn',`《${P.threat.sp.name}》が狙っている！ 逃げろ`]);if(P.idleT>.8)hs.push(['warn','棒立ちは見抜かれる']);}
     const sw=P.hint.sw;if(sw)hs.push(['',`［${B.atk}］長押し：丸呑み${sw===2?'（…何かが潜んでいる気がする）':''}`]);
-    if(MATCH.kind==='coop'&&c.stage===1&&!P.hint.court&&ECO.counts&&(ECO.counts[c.key]|0)<SP[c.key].pop*.6)hs.push(['','《'+c.sp.name+'》が足りない — 成熟した異性と交配して増やそう']);
+    if(MATCH.kind==='coop'&&c.stage===1&&!P.hint.court&&!mateNear(c)&&ECO.counts&&(ECO.counts[c.key]|0)<SP[c.key].pop*.6)hs.push(['','《'+c.sp.name+'》が足りない — 成熟した異性と交配して増やそう']);
     if(P.hint.court)hs.push(['',`［${B.court}］長押し：求愛・交配`]);
+    else if(c.stage===1&&mateNear(c))hs.push(['love',`ピンクのオーラ＝交配できる相手 — 近づいて［${B.court}］長押し`]);
     if(c.stage===2)hs.push(['warn','宿主は老衰期 — 乗り換えを急げ']);
     if(P.toxin>.2)hs.push(['warn','毒沼で寄生が剥がれかけている！']);
     if(P.inBush&&!P.cyst&&P.nutr>=20)hs.push(['',`茂みの中：［${B.cyst}］で分身シスト`]);
@@ -2419,10 +2433,21 @@ function updateHUD(dt){
   if(h!==lastHint){$('hint').innerHTML=h;lastHint=h}
   // cooldowns on slots
   document.querySelectorAll('#slots .cd').forEach(el=>{const k=el.dataset.cd;const cd=TRAITS[k].cd;const v=cd?clamp((P.skillCd[k]||0)/cd,0,1):0;el.style.transform=`scaleY(${v})`});
-  // stats
-  if(hudOn){const s=$('stats');s.style.display='block';const lr=isL?1-P.dry/DRY:1-c.age/c.life;
-    s.innerHTML=`${c.sp.name} ${isL?'':(c.sex?'♀':'♂')} 世代 ${P.gen}<br>体力 ${c.hp.toFixed(0)}/${c.maxhp.toFixed(0)}<div class="bar"><i style="width:${c.hp/c.maxhp*100}%;background:#5fe08a"></i></div>アドレナリン ${P.adr|0}%<div class="bar"><i style="width:${P.adr}%;background:#ff9d3a"></i></div>${isL?'乾燥':'寿命'} ${(lr*100)|0}%<div class="bar"><i style="width:${lr*100}%;background:#c8c0d8"></i></div>攻撃 ${c.atk.toFixed(1)}　栄養 ${P.nutr|0}　シスト ${P.cyst?'あり':'なし'}`}
-  else $('stats').style.display='none';
+}
+function mateNear(c){const t=performance.now();if(t-(mateNear.t||0)<400)return mateNear.v;mateNear.t=t;const ally=mateAllyIds();let f=false;
+  for(const o of creatures){if(Math.abs(o.x-c.x)>260||Math.abs(o.y-c.y)>260)continue;if(isMate(c,o,ally)){f=true;break}}return mateNear.v=f}
+// status panel (bottom-left): always visible while you are in a body
+function updateStats(c){
+  const s=$('stats');
+  if(gameState!=='play'||!c){if(lastStats){s.style.display='none';s.innerHTML='';lastStats=''}return}
+  const isL=c.key==='larva',lr=clamp(isL?1-P.dry/DRY:1-c.age/c.life,0,1),hp=clamp(c.hp/c.maxhp,0,1),adr=clamp(P.adr,0,100);
+  const stage=isL?'':['幼体期','成熟期','老衰期'][c.stage]||'';
+  const h=`<div class="st-hd"><b>${c.sp.name}</b>${isL?'':(c.sex?' ♀':' ♂')}<span>${stage?stage+'・':''}第${c.sp.tier}階層・世代 ${P.gen}</span></div>`+
+    `<div class="st-r"><span>体力</span><div class="bar"><i style="width:${hp*100}%;background:${hp>.5?'#5fe08a':hp>.25?'#ffc84a':'#ff5a5a'}"></i></div><em>${c.hp.toFixed(0)}/${c.maxhp.toFixed(0)}</em></div>`+
+    `<div class="st-r"><span>アドレナリン</span><div class="bar"><i style="width:${adr}%;background:${adr>=100?'#ffd84a':'#ff9d3a'}"></i></div><em>${adr|0}%</em></div>`+
+    `<div class="st-r"><span>${isL?'乾燥まで':'寿命'}</span><div class="bar"><i style="width:${lr*100}%;background:${isL?'#7fc8ff':'#c8c0d8'}"></i></div><em>${(lr*100)|0}%</em></div>`+
+    `<div class="st-ft">攻撃 ${c.atk.toFixed(1)}　栄養 ${P.nutr|0}　シスト ${P.cyst?'あり':'なし'}</div>`;
+  if(h!==lastStats){s.innerHTML=h;s.style.display='block';lastStats=h}
 }
 function recordHtml(){const m=Math.floor(P.time/60),s=Math.floor(P.time%60);
   return `生存時間　${m}分${String(s).padStart(2,'0')}秒<br>世代数　${P.gen}<br>最高到達　《${P.bestName}》（第${P.bestTier}階層）<br>乗り換え　${P.transfers}回　捕食　${P.kills}匹<br>継承形質　${P.slots.length?P.slots.map(t=>TRAITS[t].name).join('・'):'なし'}${P.echo?'<br><span style="color:#ffcf80">★ ECHO：頂点の血脈を繋いだ</span>':''}`}
@@ -2904,7 +2929,7 @@ $('bDiscard').onclick=()=>chooseTrait(-1);
 //  FIELD MAP — painted atlas of the (now 4x) world, fog of war,
 //  minimap, full-screen map, predator sightings, co-op allies
 // ================================================================
-const MAPV={MS:480,img:null,fog:null,fg:null,FG:48,open:false,lastRev:null,revT:0,sight:new Map(),sightT:0,explored:0};
+const MAPV={MS:480,img:null,fog:null,fg:null,FG:48,open:false,zoom:1,cx:WORLD/2,cy:WORLD/2,big:false,mini:1,ptr:new Map(),lastRev:null,revT:0,sight:new Map(),sightT:0,explored:0};
 const MAP_COL={[B_GRASS]:[143,209,106],[B_FOREST]:[86,160,78],[B_DIRT]:[222,186,128],[B_ROCK]:[190,186,206],[B_SWAMP]:[128,146,100],[B_SAND]:[243,219,160]};
 function buildMapImage(){
   const MS=MAPV.MS,sc=WORLD/MS,cv=mk(MS,MS),g=cv.getContext('2d'),id=g.createImageData(MS,MS),d=id.data;
@@ -2954,8 +2979,12 @@ function mapTick(dt){
       if(MAPV.sight.size>40){const arr=[...MAPV.sight.entries()].sort((a,b)=>a[1].t-b[1].t);for(let i=0;i<arr.length-40;i++)MAPV.sight.delete(arr[i][0])}}}
 }
 function mapAllies(){if(MATCH.kind!=='coop')return[];
-  if(MATCH.mode==='client')return(NET.pp||[]).filter(p=>p.length>=4&&p[1]!==P.name).map(p=>({x:p[2],y:p[3],name:p[1]}));
-  return PLAYERS.filter(p=>p!==P&&p.c).map(p=>({x:p.c.x,y:p.c.y,name:p.name}))}
+  if(MATCH.mode==='client'){const me=P.c?P.c.id:-1;return(NET.pp||[]).filter(p=>p.length>=4&&p[0]!==me).map(p=>{const g=NET.ghosts.get(p[0]);return g?{x:g.x,y:g.y,name:cleanName(p[1]),key:g.key}:{x:p[2],y:p[3],name:cleanName(p[1])}})}
+  return PLAYERS.filter(p=>p!==P&&p.c&&!p.c.dead).map(p=>({x:p.c.x,y:p.c.y,name:p.name,key:p.c.key}))}
+// breedable partners near you (pink hearts on the map)
+function mapMates(vx,vy,vw){const me=mateSelf();if(!me)return[];const ally=mateAllyIds(),out=[];
+  for(const o of creatures){if(o.x<vx||o.y<vy||o.x>vx+vw||o.y>vy+vw||Math.abs(o.x-me.x)>520||Math.abs(o.y-me.y)>520)continue;if(isMate(me,o,ally)){out.push(o);if(out.length>=24)break}}return out}
+function mapHeart(g,x,y,r){g.beginPath();g.moveTo(x,y+r*.9);g.bezierCurveTo(x-r*1.5,y-r*.1,x-r*.6,y-r*1.3,x,y-r*.45);g.bezierCurveTo(x+r*.6,y-r*1.3,x+r*1.5,y-r*.1,x,y+r*.9);g.closePath()}
 
 // draws the map into ctx; (vx,vy,vw) = world window, (W) = target px size
 function drawMapView(g,W,vx,vy,vw,opt){
@@ -2974,10 +3003,19 @@ function drawMapView(g,W,vx,vy,vw,opt){
     const ic=R3.icons[s.key];if(ic)g.drawImage(ic,x-r*1.05,y-r*1.05,r*2.1,r*2.1);g.globalAlpha=1}
   // the cyst you left behind
   if(P.cyst){const [x,y]=T(P.cyst.x,P.cyst.y);g.fillStyle='#b98aff';g.strokeStyle='#3a1a6a';g.lineWidth=1.5;g.beginPath();g.arc(x,y,opt.big?5:3.5,0,TAU);g.fill();g.stroke()}
-  // co-op allies
-  g.font=`800 ${opt.big?12:9}px 'M PLUS Rounded 1c', sans-serif`;g.textAlign='center';
-  for(const a of mapAllies()){const [x,y]=T(a.x,a.y);g.fillStyle='#7ff08a';g.strokeStyle='#14361a';g.lineWidth=1.6;g.beginPath();g.arc(x,y,opt.big?5.5:3.8,0,TAU);g.fill();g.stroke();
-    if(opt.big){g.lineWidth=3;g.strokeStyle='rgba(20,40,20,.85)';g.strokeText(a.name,x,y-9);g.fillStyle='#d4ffd4';g.fillText(a.name,x,y-9)}}
+  // breedable partners: pink hearts
+  {const r=(opt.big?6:4.2)*(opt.s||1);for(const o of mapMates(vx,vy,vw)){const [x,y]=T(o.x,o.y),pu=1+.12*Math.sin(t*5+o.id);g.fillStyle='#ff7fb4';g.strokeStyle='#5a1030';g.lineWidth=1.4*(opt.s||1);mapHeart(g,x,y,r*pu);g.fill();g.stroke()}}
+  // co-op allies: always on the map; off-window allies get an arrow on the edge
+  {const s=opt.s||1,fs=(opt.big?12:9)*s,R=(opt.big?6:4.5)*s;g.font=`800 ${fs}px 'M PLUS Rounded 1c', sans-serif`;g.textAlign='center';
+  for(const a of mapAllies()){let [x,y]=T(a.x,a.y);const pu=.5+.5*Math.sin(t*4);
+    const m=R+4,out=x<m||y<m||x>W-m||y>W-m;
+    if(out){const cx=W/2,cy=W/2,dx=x-cx,dy=y-cy,f=Math.min((W/2-m)/Math.max(1e-3,Math.abs(dx)),(W/2-m)/Math.max(1e-3,Math.abs(dy)));x=cx+dx*f;y=cy+dy*f;
+      const an=Math.atan2(dy,dx);g.save();g.translate(x,y);g.rotate(an);g.fillStyle='#7ff08a';g.strokeStyle='#14361a';g.lineWidth=1.6*s;g.beginPath();g.moveTo(R*1.5,0);g.lineTo(-R*.9,R*1.1);g.lineTo(-R*.4,0);g.lineTo(-R*.9,-R*1.1);g.closePath();g.fill();g.stroke();g.restore()}
+    else{g.strokeStyle=`rgba(127,240,138,${.35+.45*pu})`;g.lineWidth=2*s;g.beginPath();g.arc(x,y,R+2*s+pu*3*s,0,TAU);g.stroke();
+      g.fillStyle='#7ff08a';g.strokeStyle='#14361a';g.lineWidth=1.8*s;g.beginPath();g.arc(x,y,R,0,TAU);g.fill();g.stroke();
+      const ic=a.key&&R3.icons[a.key];if(ic&&opt.big)g.drawImage(ic,x-R*.9,y-R*.9,R*1.8,R*1.8)}
+    const ly=out?(y>W/2?y-R*1.8:y+R*1.8+fs*.7):y-R-5*s,lx=clamp(x,g.measureText(a.name).width/2+3,W-g.measureText(a.name).width/2-3);
+    g.lineWidth=3*s;g.strokeStyle='rgba(20,40,20,.85)';g.strokeText(a.name,lx,ly);g.fillStyle='#d4ffd4';g.fillText(a.name,lx,ly)}}
   // you
   const c=P.c;if(c&&!c.dead){const [x,y]=T(c.x,c.y),pu=.5+.5*Math.sin(t*5),R=opt.big?9:6.5;
     {const a=CAM3.yaw,L=opt.big?30:24;const gr=g.createRadialGradient(x,y,2,x,y,L);gr.addColorStop(0,'rgba(255,255,255,.5)');gr.addColorStop(1,'rgba(255,255,255,0)');g.fillStyle=gr;g.beginPath();g.moveTo(x,y);g.arc(x,y,L,a-.48,a+.48);g.closePath();g.fill()}
@@ -2987,23 +3025,68 @@ function drawMapView(g,W,vx,vy,vw,opt){
 }
 // ---- minimap (HUD) ---------------------------------------------------
 function renderMinimap(){
-  const el=$('mini');if(!el)return;const show=gameState==='play'&&!!MAPV.img&&!MAPV.open;el.style.display=show?'block':'none';$('miniLbl').style.display=show?'block':'none';if(!show)return;
+  const el=$('mini');if(!el)return;const show=gameState==='play'&&!!MAPV.img&&!MAPV.open;el.style.display=show?'block':'none';$('miniLbl').style.display=$('miniSize').style.display=show?'block':'none';if(!show)return;
   const css=el.clientWidth||140,dpr=Math.min(2,devicePixelRatio||1),W=Math.round(css*dpr);if(el.width!==W){el.width=W;el.height=W}
-  const g=el.getContext('2d'),c=P.c,cx=c?c.x:cam.x+GW/2,cy=c?c.y:cam.y+GH/2,vw=1300;
+  const g=el.getContext('2d'),c=P.c,cx=c?c.x:cam.x+GW/2,cy=c?c.y:cam.y+GH/2,vw=Math.round(1300*Math.sqrt(MAPV.mini));
   drawMapView(g,W,clamp(cx-vw/2,0,WORLD-vw),clamp(cy-vw/2,0,WORLD-vw),vw,{big:false,dpr});
   const lbl=`${cellName(cx,cy)}　探索 ${Math.round(MAPV.explored/(MAPV.FG*MAPV.FG)*100)}%`;if($('miniLbl').textContent!==lbl)$('miniLbl').textContent=lbl;
 }
+// minimap size: H key / the corner button cycles 1x -> 1.5x -> 2x (remembered per browser)
+const MINI_SIZES=[1,1.5,2];
+function applyMini(){document.body.style.setProperty('--ms',MAPV.mini);const b=$('miniSize');if(b)b.textContent=MAPV.mini>=2||(document.body.classList.contains('touch')&&MAPV.mini>1)?'－':'＋'}
+function cycleMini(){const i=MINI_SIZES.indexOf(MAPV.mini);MAPV.mini=MINI_SIZES[(i+1)%MINI_SIZES.length];if(document.body.classList.contains('touch')&&MAPV.mini>1.5)MAPV.mini=1;applyMini();try{localStorage.setItem('pe_mini',MAPV.mini)}catch(e){}sfx('ui')}
 // ---- full map --------------------------------------------------------
-function setMap(on){if(gameState!=='play'||modalOpen)return;if(on&&$('pause').classList.contains('on'))return;MAPV.open=on;show('mapv',on);if(on)renderFullMap();sfx('ui')}
+// zoom 1-8x, drag / arrow keys / right stick to pan, wheel / pinch / +- to zoom, and a full-window mode
+const MAP_ZMAX=8;
+function setMap(on){if(gameState!=='play'||modalOpen)return;if(on&&$('pause').classList.contains('on'))return;MAPV.open=on;show('mapv',on);
+  if(on){const c=P.c;if(MAPV.zoom>1&&c){MAPV.cx=c.x;MAPV.cy=c.y}MAPV.ptr.clear();mapButtons();renderFullMap()}sfx('ui')}
+function mapView(){const vw=WORLD/MAPV.zoom;MAPV.cx=clamp(MAPV.cx,vw/2,WORLD-vw/2);MAPV.cy=clamp(MAPV.cy,vw/2,WORLD-vw/2);return[MAPV.cx-vw/2,MAPV.cy-vw/2,vw]}
+// zoom by factor f keeping the world point under (fx,fy) (0..1 of the canvas) fixed
+function mapZoom(f,fx,fy){const onMe=fx===undefined&&MAPV.zoom<=1.001&&f>1&&P.c;if(fx===undefined){fx=fy=.5}const [vx,vy,vw]=mapView(),wx=vx+fx*vw,wy=vy+fy*vw;
+  MAPV.zoom=clamp(MAPV.zoom*f,1,MAP_ZMAX);const nw=WORLD/MAPV.zoom;MAPV.cx=onMe?P.c.x:wx-(fx-.5)*nw;MAPV.cy=onMe?P.c.y:wy-(fy-.5)*nw;mapView();mapButtons()}
+function mapPan(dx,dy){const vw=WORLD/MAPV.zoom;MAPV.cx+=dx*vw;MAPV.cy+=dy*vw;mapView()}
+function mapCenter(){const c=P.c;if(c){if(MAPV.zoom<2)MAPV.zoom=3;MAPV.cx=c.x;MAPV.cy=c.y;mapView();mapButtons()}}
+function mapBig(on){MAPV.big=on===undefined?!MAPV.big:on;$('mapv').classList.toggle('big',MAPV.big);mapButtons()}
+function mapButtons(){const z=MAPV.zoom;$('mapZoom').textContent='×'+(z<1.05?'1':z.toFixed(1).replace(/\.0$/,''));$('bMapBig').textContent=MAPV.big?'標準サイズ':'画面いっぱい';$('bMapOut').disabled=z<=1.001;$('bMapIn').disabled=z>=MAP_ZMAX-.001;$('bMapAll').disabled=z<=1.001}
+function mapPad(dt){
+  const gp=[...(navigator.getGamepads?navigator.getGamepads():[])].find(p=>p&&p.connected);
+  if(gp){const dz=v=>Math.abs(v)>.2?v:0,ax=dz(gp.axes[2]||0),ay=dz(gp.axes[3]||0);if(ax||ay)mapPan(ax*dt*.9,ay*dt*.9);
+    const b=i=>gp.buttons[i]&&(gp.buttons[i].pressed||gp.buttons[i].value>.4);if(b(5)||b(7))mapZoom(1+dt*2.2);if(b(4)||b(6))mapZoom(1/(1+dt*2.2))}
+  const px=(keys.ArrowRight?1:0)-(keys.ArrowLeft?1:0),py=(keys.ArrowDown?1:0)-(keys.ArrowUp?1:0);if(px||py)mapPan(px*dt*.8,py*dt*.8);
+  if(keys.Equal||keys.NumpadAdd||keys.Semicolon)mapZoom(1+dt*2.2);if(keys.Minus||keys.NumpadSubtract)mapZoom(1/(1+dt*2.2));
+}
 function renderFullMap(){
-  if(!MAPV.open)return;const el=$('mapc'),box=el.parentElement,css=Math.max(180,Math.min(box.clientWidth,innerHeight-(innerWidth<700?250:210))),dpr=Math.min(2,devicePixelRatio||1),W=Math.round(css*dpr);
+  if(!MAPV.open)return;const el=$('mapc'),box=el.parentElement,small=innerWidth<700;
+  const css=Math.round(MAPV.big?Math.max(180,Math.min(innerWidth-16,innerHeight-(small?118:96))):Math.max(180,Math.min(box.clientWidth,innerHeight-(small?330:310)))),dpr=Math.min(2,devicePixelRatio||1),W=Math.round(css*dpr);
   if(el.width!==W){el.width=W;el.height=W;el.style.width=css+'px';el.style.height=css+'px'}
-  const g=el.getContext('2d');drawMapView(g,W,0,0,WORLD,{big:true});
-  // border coordinates
-  g.font=`800 ${Math.round(11*dpr)}px 'M PLUS Rounded 1c', sans-serif`;g.fillStyle='rgba(70,50,20,.75)';g.textAlign='center';
-  for(let q=0;q<8;q++){g.fillText('ABCDEFGH'[q],(q+.5)*W/8,13*dpr);g.fillText(String(q+1),8*dpr,(q+.5)*W/8+4*dpr)}
-  const c=P.c,ex=Math.round(MAPV.explored/(MAPV.FG*MAPV.FG)*100);
-  const lbl=`現在地 ${c?cellName(c.x,c.y):'—'}　／　探索率 ${ex}%　／　目撃した上位種 ${MAPV.sight.size}`;if($('mapInfo').textContent!==lbl)$('mapInfo').textContent=lbl;
+  const g=el.getContext('2d'),[vx,vy,vw]=mapView();drawMapView(g,W,vx,vy,vw,{big:true});
+  // border coordinates (follow the zoomed window)
+  g.font=`800 ${Math.round(11*dpr)}px 'M PLUS Rounded 1c', sans-serif`;g.fillStyle='rgba(70,50,20,.75)';g.textAlign='center';const k=W/vw,cs=WORLD/8;
+  for(let q=0;q<8;q++){const sx=((q+.5)*cs-vx)*k,sy=((q+.5)*cs-vy)*k;if(sx>14*dpr&&sx<W-6*dpr)g.fillText('ABCDEFGH'[q],sx,13*dpr);if(sy>18*dpr&&sy<W-4*dpr)g.fillText(String(q+1),8*dpr,sy+4*dpr)}
+  if(MAPV.zoom>1.001){// overview inset: where the zoomed window sits in the whole world
+    const iw=Math.round(Math.min(W*.24,130*dpr)),ix=W-iw-8*dpr,iy=8*dpr;g.save();g.globalAlpha=.92;g.drawImage(MAPV.img,ix,iy,iw,iw);g.globalAlpha=.7;g.drawImage(MAPV.fog,ix,iy,iw,iw);g.globalAlpha=1;
+    g.lineWidth=2*dpr;g.strokeStyle='#fff3d0';g.strokeRect(ix,iy,iw,iw);g.strokeStyle='#e04040';g.strokeRect(ix+vx/WORLD*iw,iy+vy/WORLD*iw,Math.max(3,vw/WORLD*iw),Math.max(3,vw/WORLD*iw));
+    const c=P.c;if(c){g.fillStyle='#ffd04a';g.strokeStyle='#3a2408';g.lineWidth=1;g.beginPath();g.arc(ix+c.x/WORLD*iw,iy+c.y/WORLD*iw,3*dpr,0,TAU);g.fill();g.stroke()}
+    for(const a of mapAllies()){g.fillStyle='#7ff08a';g.strokeStyle='#14361a';g.lineWidth=1;g.beginPath();g.arc(ix+a.x/WORLD*iw,iy+a.y/WORLD*iw,2.6*dpr,0,TAU);g.fill();g.stroke()}g.restore()}
+  const c=P.c,ex=Math.round(MAPV.explored/(MAPV.FG*MAPV.FG)*100),al=mapAllies();
+  const lbl=`現在地 ${c?cellName(c.x,c.y):'—'}　／　探索率 ${ex}%　／　目撃した上位種 ${MAPV.sight.size}`+(MATCH.kind==='coop'&&MATCH.mode!=='solo'?`　／　仲間 ${al.length?al.map(a=>a.name+'（'+cellName(a.x,a.y)+'）').join('・'):'—'}`:'');
+  if($('mapInfo').textContent!==lbl)$('mapInfo').textContent=lbl;
+}
+{// pointer controls on the big map: drag to pan, wheel / pinch to zoom, double-click to zoom in
+  const el=$('mapc'),rel=e=>{const r=el.getBoundingClientRect();return[(e.clientX-r.left)/r.width,(e.clientY-r.top)/r.height]};
+  el.style.touchAction='none';el.style.cursor='grab';
+  el.addEventListener('wheel',e=>{e.preventDefault();const [fx,fy]=rel(e);mapZoom(e.deltaY<0?1.25:.8,fx,fy)},{passive:false});
+  el.addEventListener('pointerdown',e=>{e.preventDefault();try{el.setPointerCapture(e.pointerId)}catch(_){}MAPV.ptr.set(e.pointerId,{x:e.clientX,y:e.clientY})});
+  el.addEventListener('pointermove',e=>{const p=MAPV.ptr.get(e.pointerId);if(!p)return;const r=el.getBoundingClientRect();
+    if(MAPV.ptr.size===1){mapPan(-(e.clientX-p.x)/r.width,-(e.clientY-p.y)/r.height)}
+    else if(MAPV.ptr.size===2){const o=[...MAPV.ptr.entries()].find(([id])=>id!==e.pointerId)[1],d0=Math.hypot(p.x-o.x,p.y-o.y),d1=Math.hypot(e.clientX-o.x,e.clientY-o.y);
+      if(d0>10)mapZoom(d1/d0,((e.clientX+o.x)/2-r.left)/r.width,((e.clientY+o.y)/2-r.top)/r.height)}
+    p.x=e.clientX;p.y=e.clientY});
+  const up=e=>MAPV.ptr.delete(e.pointerId);el.addEventListener('pointerup',up);el.addEventListener('pointercancel',up);
+  el.addEventListener('dblclick',e=>{const [fx,fy]=rel(e);mapZoom(2,fx,fy)});
+  $('bMapIn').onclick=()=>mapZoom(1.6);$('bMapOut').onclick=()=>mapZoom(1/1.6);$('bMapHome').onclick=mapCenter;$('bMapAll').onclick=()=>{MAPV.zoom=1;mapView();mapButtons()};$('bMapBig').onclick=()=>mapBig();
+  $('miniSize').addEventListener('pointerdown',e=>{e.preventDefault();e.stopPropagation();auInit();cycleMini()});
+  try{const v=+localStorage.getItem('pe_mini');if(MINI_SIZES.includes(v))MAPV.mini=v}catch(e){}applyMini();mapButtons();
 }
 
 // ================================================================
@@ -3016,7 +3099,7 @@ function frame(now){
   pollInput();
   const scrNow=([...document.querySelectorAll('.screen.on')].pop()||{}).id||'';if(scrNow!==lastScr){lastScr=scrNow;navIdx=0}
   menuNav();
-  if(IN.hudP&&gameState==='play')hudOn=!hudOn;
+  if(IN.hudP&&gameState==='play'&&!modalOpen)cycleMini();
   if(pendingTrait&&IN.slotP>=0){chooseTrait(IN.slotP===9||IN.slotP>=P.slots.length?-1:IN.slotP);IN.slotP=-1}
   if(MAPV.open&&(gameState!=='play'||IN.pauseP||IN.mapP)){setMap(false);IN.pauseP=false;IN.mapP=false;if(gameState!=='play'){MAPV.open=false;show('mapv',false)}}
   if(IN.mapP&&gameState==='play'&&!modalOpen)setMap(true);
@@ -3035,7 +3118,7 @@ function frame(now){
   r3Camera(dt);r3Adapt(rawDt);
   const _t1=performance.now();render();PERF.r=PERF.r*.95+(performance.now()-_t1)*.05;
   updateHUD(dt);audioTick(dt);
-  if(!(MATCH.mode==='solo'&&MAPV.open))mapTick(dt);renderMinimap();renderFullMap();
+  if(!(MATCH.mode==='solo'&&MAPV.open))mapTick(dt);if(MAPV.open)mapPad(Math.min(.1,rawDt));renderMinimap();renderFullMap();
 }
 
 // ================================================================
