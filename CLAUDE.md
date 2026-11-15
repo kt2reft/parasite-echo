@@ -79,5 +79,6 @@ archive/parasite-echo-2d-final.html  3D化直前の 2D 見下ろし版（参考�
 - 3D化に合わせて、地形の起伏（崖・高台）をゲームプレイに使う余地がある（現状は見た目のみ）。
 
 ## 公開
+- GitHub：https://github.com/kt2reft/parasite-echo （Public、ライセンスなし）。`main` へ push すると GitHub Actions（`.github/workflows/pages.yml`）がビルドして GitHub Pages https://kt2reft.github.io/parasite-echo/ に公開。Pages 版ではオンラインモードは使えない（claude.ai の room 機能が無いため「利用不可」表示）。コミットの名義は `kt2reft` / GitHub の noreply メール。
 - claude.ai のアーティファクト（slug `6ca17dfa-0669-428f-b336-6fbce9923929`、現在ウェブ公開中）。
 - 更新するときは `dist/index.html` を差し替える。公開中なので、更新はリンクを持つ全員にすぐ反映される点に注意。
