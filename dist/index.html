@@ -2794,27 +2794,30 @@ function p2pLobby(){
 async function netConnect(){
   if(NET.api)return NET.api;
   NET.status='connecting';renderLobby();
-  const onClaude=/claude/i.test(location.hostname)||window.claude;
-  for(let i=0;i<(onClaude?40:0)&&!(window.claude&&window.claude.use);i++)await new Promise(r=>setTimeout(r,250));
-  if(!(window.claude&&window.claude.use)){
-    if(!p2pOK()){NET.status='unavailable';renderLobby();return null}
-    NET.api=p2pLobby();NET.p2p=true;NET.status='ok';NET.connected=true;renderLobby();return NET.api}
-  try{const r=await window.claude.use('room');
-    if(!r){NET.status='unavailable';renderLobby();return null}
+  // P2P (PeerJS) is the default path: anyone can play without a Claude account.
+  // The claude.ai room capability is only used when it is actually present and working.
+  const p2p=()=>{if(!p2pOK()){NET.status='unavailable';renderLobby();return null}
+    NET.api=p2pLobby();NET.p2p=true;NET.status='ok';NET.connected=true;renderLobby();return NET.api};
+  const onClaude=/claude/i.test(location.hostname);
+  for(let i=0;i<(onClaude?12:0)&&!(window.claude&&window.claude.use);i++)await new Promise(r=>setTimeout(r,250));
+  if(!(window.claude&&window.claude.use))return p2p();
+  try{const r=await Promise.race([window.claude.use('room'),new Promise(res=>setTimeout(()=>res(null),5000))]);
+    if(!r||typeof r.join!=='function')return p2p();
     NET.api=r;NET.status='ok';
-    r.onPeers(()=>renderLobby(),()=>{NET.status='unavailable';renderLobby()});
+    r.onPeers(()=>renderLobby(),()=>{if(NET.api===r&&!NET.role){NET.api=null;p2p()}});
     r.onConnection(c=>{NET.connected=c;renderLobby()});
     r.presence({app:'pe1',nm:NET.name,mode:'idle'}).catch(()=>{});
     renderLobby();return r}
-  catch(e){NET.status='unavailable';renderLobby();return null}
+  catch(e){return p2p()}
 }
+const PAGES_URL='https://kt2reft.github.io/parasite-echo/';
 function lobbyRooms(){if(!NET.api)return[];return NET.api.peers().filter(p=>!p.sameTab&&p.presence&&p.presence.app==='pe1'&&p.presence.mode==='host'&&typeof p.presence.code==='string')}
 function renderLobby(){
   if(!$('lobby').classList.contains('on')&&!$('roomscr').classList.contains('on'))return;
   const st=$('netStatus');
-  st.textContent=NET.status==='ok'?(NET.p2p?'● 準備OK（ルームを作るか、コードで参加）':NET.connected?'● 接続中':'… 接続しています'):NET.status==='connecting'?'… 接続しています':'このブラウザではオンライン機能を使えません。';
+  st.textContent=NET.status==='ok'?(NET.p2p?'● 準備OK（ルームを作るか、コードで参加）':NET.connected?'● 接続中':'… 接続しています'):NET.status==='connecting'?'… 接続しています':'このブラウザではオンライン機能を使えません。最新のブラウザで '+PAGES_URL+' を開いてください。';
   $('p2pJoin').style.display=NET.p2p?'block':'none';
-  $('lobbyNote').innerHTML=NET.p2p?'友だちにルームコード（または招待リンク）を伝えて参加してもらいます。<br>回線の相性によっては繋がらないことがあります。':'このページを同時に開いている人のルームが表示されます。<br>友だちを招くには、このページを共有してください（claude.ai へのログインが必要です）。';
+  $('lobbyNote').innerHTML=NET.p2p?'友だちにルームコード（または招待リンク）を伝えて参加してもらいます。<br>回線の相性によっては繋がらないことがあります。':'このページを同時に開いている人のルームが表示されます。<br>Claude を使っていない友だちとは、'+PAGES_URL+' で遊べます。';
   st.style.color=NET.status==='ok'&&NET.connected?'#9cf59c':NET.status==='unavailable'?'#ff9a8a':'#cdb8ee';
   $('bCreate').disabled=$('bCreateCoop').disabled=!(NET.status==='ok');
   const box=$('roomList');box.innerHTML='';
@@ -2847,7 +2850,7 @@ async function createRoom(kind){
   let ok=false;
   for(let tries=0;tries<3&&!ok;tries++){NET.code=Math.random().toString(36).slice(2,6).replace(/[^a-z0-9]/g,'x');
     try{NET.sync=await api.join('pe-'+NET.code,{host:true});NET.info=await api.join('pi-'+NET.code,{host:true});ok=true}catch(e){if(!(e&&e.message==='taken'))break}}
-  if(!ok){toast('ルームを作れませんでした',NET.p2p?'通信サーバーに繋がりません。時間をおいて試してください':'時間をおいて試してください');NET.role=null;renderLobby();return}
+  if(!ok){toast('ルームを作れませんでした',NET.p2p?(/claude/i.test(location.hostname)?'ここでは通信が制限されています。'+PAGES_URL+' で遊んでください':'通信サーバーに繋がりません。時間をおいて試してください'):'時間をおいて試してください');NET.role=null;renderLobby();return}
   NET.remote.clear();MATCH.phase='wait';MATCH.mode='host';
   NET.sync.presence({app:'pe1',role:'host',nm:NET.name,code:NET.code,ph:'wait',k:NET.kind}).catch(()=>{});
   api.presence({app:'pe1',nm:NET.name,mode:'host',code:NET.code,n:1,ph:'wait',k:NET.kind}).catch(()=>{});
