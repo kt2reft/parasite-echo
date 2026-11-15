@@ -1,0 +1,260 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<title>PARASITE ECHO</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=M+PLUS+Rounded+1c:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+:root{--gold:#ffcf4a;--gold2:#f39a22;--leaf:#5fcf6a;--ink:#fffaf0;--dim:#d7e6f2;--navy:#21334a;--panel:rgba(28,48,70,.78);--edge:#fff3d0;--pur:#c78bff;--red:#ff5a5a}
+*{box-sizing:border-box;-webkit-tap-highlight-color:transparent}
+html,body{margin:0;height:100%;background:#2b4a3a;overflow:hidden;color:var(--ink);font-family:'M PLUS Rounded 1c',system-ui,sans-serif;font-weight:700;user-select:none;-webkit-user-select:none;touch-action:none}
+#gl{position:fixed;left:0;top:0;width:100vw;height:100vh;display:block}
+#ui{position:fixed;left:0;top:0;width:100vw;height:100vh;pointer-events:none}
+#mini{position:fixed;right:calc(14px + env(safe-area-inset-right));bottom:calc(30px + env(safe-area-inset-bottom));width:150px;height:150px;border-radius:18px;border:3px solid #fff3d0;box-shadow:0 4px 0 rgba(0,0,0,.25),0 8px 18px rgba(0,0,0,.25);pointer-events:auto;cursor:pointer;display:none;background:#d9c9a3;touch-action:none}
+#miniLbl{position:fixed;right:calc(14px + env(safe-area-inset-right));bottom:calc(8px + env(safe-area-inset-bottom));width:156px;text-align:center;font-size:11px;font-weight:800;color:#fff;text-shadow:0 1.5px 0 #1d2b3d,1.5px 0 0 #1d2b3d,-1.5px 0 0 #1d2b3d,0 -1.5px 0 #1d2b3d;pointer-events:none;display:none;white-space:nowrap}
+body.touch #mini{width:96px;height:96px;border-radius:50%;bottom:auto;top:calc(44% - 132px)}
+body.touch #miniLbl{bottom:auto;top:calc(44% - 32px);width:102px;font-size:10px}
+@media (max-width:640px){body:not(.touch) #mini{width:112px;height:112px}body:not(.touch) #miniLbl{width:118px}}
+#mapv .panel{max-width:min(94vw,720px)}
+.mapBox{width:min(88vw,640px);margin:4px auto 2px;display:flex;justify-content:center}
+#mapc{border-radius:16px;border:4px solid #fff3d0;box-shadow:0 6px 0 rgba(0,0,0,.25),0 10px 30px rgba(0,0,0,.35);background:#d9c9a3}
+.mapinfo{color:#fff;font-size:13px;font-weight:800;margin:6px 0 2px}
+.mapLegend{display:flex;flex-wrap:wrap;gap:6px 12px;justify-content:center;font-size:11px;color:#eef6ff;margin:4px 0 6px}
+.mapLegend i{display:inline-block;width:11px;height:11px;border-radius:50%;margin-right:4px;vertical-align:-1px;border:2px solid}
+.layer{position:fixed;inset:0;pointer-events:none}
+.ol{text-shadow:0 2px 0 #1d2b3d,2px 0 0 #1d2b3d,-2px 0 0 #1d2b3d,0 -2px 0 #1d2b3d,1.4px 1.4px 0 #1d2b3d,-1.4px 1.4px 0 #1d2b3d,1.4px -1.4px 0 #1d2b3d,-1.4px -1.4px 0 #1d2b3d}
+#obj{position:fixed;left:calc(12px + env(safe-area-inset-left));top:calc(10px + env(safe-area-inset-top));font-size:13px;line-height:1.5;max-width:min(60vw,460px);background:var(--panel);border:2px solid rgba(255,243,208,.55);border-radius:14px;padding:7px 12px;box-shadow:0 4px 0 rgba(0,0,0,.18)}
+#obj:empty{display:none}
+#obj b{color:#ffd76a}
+#obj .sub{color:var(--dim);font-size:11px;font-weight:500}
+#obj .goal{color:#ffe08a;font-size:11px;margin-bottom:3px;font-weight:800}
+#rank{position:fixed;right:calc(10px + env(safe-area-inset-right));top:calc(10px + env(safe-area-inset-top));font-size:11px;line-height:1.6;background:var(--panel);border:2px solid rgba(255,207,74,.65);border-radius:14px;padding:6px 10px;min-width:160px;display:none;box-shadow:0 4px 0 rgba(0,0,0,.18)}
+#rank .rkh{color:#ffe08a;font-size:10px;margin-bottom:2px;font-weight:800}
+#rank .rk span,.rk span{color:#cfe0ee;margin-left:4px;font-weight:500}
+.rk b{display:inline-block;width:16px;height:16px;line-height:16px;text-align:center;border-radius:50%;background:#ffcf4a;color:#3a2a10;font-size:10px}
+.rk.me{color:#fff2b0}.rk.ai{color:#ffb0b0}
+#rank.ecomode{border-color:rgba(127,216,138,.8);min-width:0}
+.ecog{display:grid;grid-template-columns:1fr 1fr;gap:1px 10px}
+.eco{display:flex;align-items:center;gap:4px;font-size:9px;line-height:1.35;font-weight:500}
+.eco span{width:5.6em;color:#e8f6ff;margin:0;white-space:nowrap;overflow:hidden}
+.eco i{display:block;height:5px;flex:0 0 auto;border-radius:3px}
+.eco em{font-style:normal;color:#b9cddd;font-size:9px}
+.eco::after{content:'';flex:1}
+.navf{outline:3px solid #fff!important;outline-offset:3px;box-shadow:0 0 0 6px rgba(255,207,74,.7)!important}
+#nick{font:inherit;font-size:15px;background:#fffaf0;color:#2a3a4a;border:2px solid #e8c56a;border-radius:10px;padding:5px 10px;width:12em;user-select:text;-webkit-user-select:text}
+#log{position:fixed;right:calc(10px + env(safe-area-inset-right));top:calc(130px + env(safe-area-inset-top));font-size:11px;text-align:right;color:#fff;max-width:46vw}
+#log div{opacity:.95;transition:opacity 1.2s;margin-bottom:3px;background:rgba(28,48,70,.55);border-radius:10px;padding:1px 8px;display:inline-block;float:right;clear:both}
+#toast{position:fixed;left:50%;top:20%;transform:translateX(-50%);text-align:center;font-size:21px;font-weight:800;letter-spacing:.04em;transition:opacity .4s;white-space:normal;width:min(92vw,640px);color:#fff}
+#toast>div{display:inline-block;padding:4px 18px;border-radius:999px;background:linear-gradient(#ffe48a,#ffbe3b);color:#4a2c08;box-shadow:0 3px 0 #b8741c,0 6px 14px rgba(0,0,0,.25);border:2px solid #fff6d8}
+#toast small{display:block;font-size:13px;color:#fff;margin-top:6px;font-weight:800;text-shadow:0 2px 0 #1d2b3d,2px 0 0 #1d2b3d,-2px 0 0 #1d2b3d,0 -2px 0 #1d2b3d,1.4px 1.4px 0 #1d2b3d,-1.4px 1.4px 0 #1d2b3d,1.4px -1.4px 0 #1d2b3d,-1.4px -1.4px 0 #1d2b3d}
+#hint{position:fixed;left:50%;bottom:calc(16px + env(safe-area-inset-bottom));transform:translateX(-50%);text-align:center;font-size:13px;white-space:nowrap}
+#hint span{display:inline-block;margin:2px 5px;padding:3px 12px;background:rgba(255,250,236,.92);color:#2a3a4a;border:2px solid #fff;border-radius:999px;box-shadow:0 3px 0 rgba(0,0,0,.18)}
+#hint span.warn{background:#ff7a6a;color:#fff;border-color:#ffd0c8}
+#hint span.gold{background:linear-gradient(#ffe48a,#ffbe3b);color:#4a2c08;animation:pulse .6s infinite alternate}
+@keyframes pulse{from{transform:scale(1)}to{transform:scale(1.06)}}
+#slots{position:fixed;left:calc(12px + env(safe-area-inset-left));bottom:calc(14px + env(safe-area-inset-bottom));display:flex;gap:7px;pointer-events:auto}
+.slot{width:44px;height:44px;border:3px solid #fff3d0;background:radial-gradient(circle at 35% 30%,#4f7395,#24405c);border-radius:50%;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:17px;position:relative;color:#fff;box-shadow:0 3px 0 rgba(0,0,0,.25);font-weight:800}
+.slot small{font-size:7px;color:#e8f2ff;line-height:1;font-weight:700}
+.slot.innate{border-color:#9be3a4}
+.slot.sel{border-color:#ffcf4a;box-shadow:0 0 0 3px rgba(255,207,74,.45),0 3px 0 rgba(0,0,0,.25)}
+.slot.empty{opacity:.4}
+.slot .cd{position:absolute;inset:0;background:rgba(0,0,0,.55);border-radius:50%;transform-origin:bottom;pointer-events:none}
+#stats{position:fixed;left:calc(12px + env(safe-area-inset-left));bottom:calc(70px + env(safe-area-inset-bottom));font-size:11px;line-height:1.5;background:var(--panel);padding:7px 11px;border:2px solid rgba(255,243,208,.5);border-radius:12px;display:none;min-width:170px}
+#stats .bar{height:6px;background:rgba(255,255,255,.18);margin:1px 0 3px;border-radius:3px;overflow:hidden}
+#stats .bar i{display:block;height:100%}
+/* screens */
+.screen{position:fixed;inset:0;display:none;align-items:center;justify-content:center;pointer-events:auto;background:radial-gradient(ellipse at center,rgba(40,70,90,.35),rgba(16,30,44,.78));padding:16px}
+.screen.on{display:flex}
+.panel{max-width:740px;width:100%;max-height:100%;overflow:auto;text-align:center}
+.logo{font-size:clamp(36px,8.5vw,74px);font-weight:800;letter-spacing:.06em;color:#fff;line-height:1.05;
+  text-shadow:0 4px 0 #6b3fb0,4px 0 0 #6b3fb0,-4px 0 0 #6b3fb0,0 -4px 0 #6b3fb0,3px 3px 0 #6b3fb0,-3px 3px 0 #6b3fb0,3px -3px 0 #6b3fb0,-3px -3px 0 #6b3fb0,0 9px 0 #3c2170,0 14px 24px rgba(0,0,0,.35)}
+.logo em{font-style:normal;color:#ffd84a}
+.tag{color:#fff;margin:12px 0 16px;font-size:14px;letter-spacing:.14em}
+.btn{display:inline-block;margin:6px;padding:11px 28px;font:inherit;font-size:17px;font-weight:800;color:#4a2c08;background:linear-gradient(#ffe58c,#ffbf3a);border:3px solid #fff6d8;border-radius:999px;cursor:pointer;letter-spacing:.05em;box-shadow:0 5px 0 #b8741c,0 8px 16px rgba(0,0,0,.25);transition:transform .08s}
+.btn:hover,.btn:focus{transform:translateY(-2px);outline:none;filter:brightness(1.05)}
+.btn:active{transform:translateY(3px);box-shadow:0 2px 0 #b8741c}
+.btn.sub{font-size:13px;padding:7px 18px;background:linear-gradient(#ffffff,#dfeaf3);color:#2a3a4a;box-shadow:0 4px 0 #8aa0b4}
+.btn.green{background:linear-gradient(#a8f0a8,#55c463);color:#173a1c;box-shadow:0 5px 0 #2f8a3c,0 8px 16px rgba(0,0,0,.25)}
+.btn:disabled{opacity:.45;cursor:default;transform:none}
+.cols{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:10px;text-align:left;font-size:12px;line-height:1.65;margin-top:12px;font-weight:500}
+.card{background:rgba(255,250,238,.95);color:#2a3a4a;border:3px solid #fff;border-radius:16px;padding:10px 13px;box-shadow:0 4px 0 rgba(0,0,0,.15)}
+.card h3{margin:0 0 4px;font-size:14px;color:#c0701a;font-weight:800}
+.card b{color:#7a3fd0}
+.k{display:inline-block;min-width:20px;padding:0 5px;border:2px solid #c9b48a;border-bottom-width:3px;border-radius:7px;background:#fff;color:#3a2a10;text-align:center;font-size:11px;font-weight:800}
+#loading{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:linear-gradient(#7fd3f0,#a6e39a);font-size:18px;color:#fff;z-index:50;letter-spacing:.15em;font-weight:800;text-shadow:0 2px 0 #3a7a5a}
+/* trait modal */
+.tcards{display:flex;flex-wrap:wrap;gap:12px;justify-content:center;margin:14px 0}
+.tcard{width:150px;background:#fffaf0;color:#2a3a4a;border:3px solid #fff;border-radius:16px;padding:10px;cursor:pointer;font-size:12px;line-height:1.5;box-shadow:0 5px 0 rgba(0,0,0,.18);font-weight:500}
+.tcard:hover{transform:translateY(-2px)}
+.tcard .g{font-size:30px;width:52px;height:52px;line-height:52px;margin:0 auto 4px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#a983ff,#5a33b0);color:#fff;font-weight:800}
+.tcard.new{border-color:#ffcf4a;box-shadow:0 0 0 4px rgba(255,207,74,.5),0 5px 0 rgba(0,0,0,.18)}
+/* touch */
+#touch{position:fixed;inset:0;display:none;pointer-events:none}
+#touch.on{display:block}
+#stick{position:fixed;left:calc(26px + env(safe-area-inset-left));bottom:calc(34px + env(safe-area-inset-bottom));width:130px;height:130px;border-radius:50%;border:3px solid rgba(255,255,255,.75);background:radial-gradient(circle,rgba(255,255,255,.18),rgba(255,255,255,.06));pointer-events:none;opacity:.8;transition:opacity .2s}
+#stick.act{opacity:1}
+#knob{position:absolute;left:50%;top:50%;width:56px;height:56px;margin:-28px 0 0 -28px;border-radius:50%;background:radial-gradient(circle at 35% 30%,#fff,#dfe9f2);border:3px solid #fff;box-shadow:0 4px 0 rgba(0,0,0,.2)}
+body.touch #slots{bottom:calc(178px + env(safe-area-inset-bottom))}
+body.touch #hint{bottom:calc(236px + env(safe-area-inset-bottom));white-space:normal;width:92vw}
+body.touch #stats{bottom:calc(232px + env(safe-area-inset-bottom))}
+.tb{position:fixed;pointer-events:auto;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:800;color:#2a3a4a;background:radial-gradient(circle at 35% 30%,#ffffff,#dbe7f1);border:3px solid #fff;box-shadow:0 5px 0 rgba(30,50,70,.35);touch-action:none}
+.tb.on{transform:translateY(3px);box-shadow:0 2px 0 rgba(30,50,70,.35);filter:brightness(.92)}
+#tbA{width:80px;height:80px;right:calc(22px + env(safe-area-inset-right));bottom:calc(40px + env(safe-area-inset-bottom));font-size:16px;background:radial-gradient(circle at 35% 30%,#ffe9a0,#ffbf3a);color:#4a2c08}
+#tbS{width:58px;height:58px;right:calc(114px + env(safe-area-inset-right));bottom:calc(26px + env(safe-area-inset-bottom));background:radial-gradient(circle at 35% 30%,#d8c4ff,#9b72f0);color:#fff}
+#tbC{width:58px;height:58px;right:calc(30px + env(safe-area-inset-right));bottom:calc(134px + env(safe-area-inset-bottom));background:radial-gradient(circle at 35% 30%,#ffd2e2,#ff8fb4);color:#fff}
+#tbO{width:58px;height:58px;right:calc(108px + env(safe-area-inset-right));bottom:calc(100px + env(safe-area-inset-bottom));background:radial-gradient(circle at 35% 30%,#ffb0a0,#ff5a4a);color:#fff}
+.tsm{position:fixed;pointer-events:auto;right:calc(12px + env(safe-area-inset-right));padding:5px 11px;font-size:11px;font-weight:800;border-radius:999px;background:rgba(255,250,238,.92);border:2px solid #fff;color:#2a3a4a;touch-action:none;box-shadow:0 3px 0 rgba(0,0,0,.2)}
+#tbPause{top:calc(54px + env(safe-area-inset-top))}
+#tbObs{top:calc(86px + env(safe-area-inset-top))}
+#tbCyst{top:calc(118px + env(safe-area-inset-top))}
+#tbPurge{top:calc(150px + env(safe-area-inset-top))}
+.tsm.on{background:#c79bff;color:#fff}
+#rank .more{display:none;color:#cfe0ee;font-size:9px}
+body.touch #rank{pointer-events:auto;max-width:44vw}
+body.touch #rank.collapsed .ecog,body.touch #rank.collapsed .vit,body.touch #rank.collapsed .rk:nth-of-type(n+4){display:none}
+body.touch #rank.collapsed .more{display:block}
+body.touch #tbPause{top:44%}body.touch #tbObs{top:calc(44% + 36px)}body.touch #tbCyst{top:calc(44% + 72px)}body.touch #tbPurge{top:calc(44% + 108px)}
+body.touch #obj{max-width:52vw}
+@media (max-width:640px){#rank{pointer-events:auto;max-width:44vw}#rank.collapsed .ecog,#rank.collapsed .vit,#rank.collapsed .rk:nth-of-type(n+4){display:none}#rank.collapsed .more{display:block}#obj{max-width:52vw}#obj{font-size:11.5px;padding:6px 9px}#toast{font-size:16px}#hint{font-size:11px;white-space:normal;width:92vw}}
+</style>
+</head>
+<body>
+<canvas id="gl"></canvas>
+<canvas id="ui"></canvas>
+<div class="layer">
+  <div id="obj"></div>
+  <div id="log"></div>
+  <div id="toast"></div>
+  <div id="hint"></div>
+  <div id="stats"></div>
+  <div id="rank"></div>
+</div>
+<div id="slots"></div>
+<canvas id="mini" title="マップを開く（N）"></canvas><div id="miniLbl"></div>
+<div id="touch">
+  <div id="stick"><div id="knob"></div></div>
+  <div class="tb" id="tbA">攻撃</div>
+  <div class="tb" id="tbS">技</div>
+  <div class="tb" id="tbC">求愛</div>
+  <div class="tb" id="tbO">OD</div>
+  <div class="tsm" id="tbPause">❚❚ 一時停止</div>
+  <div class="tsm" id="tbObs">◉ 観察</div>
+  <div class="tsm" id="tbCyst">● シスト</div>
+  <div class="tsm" id="tbPurge">✕ パージ</div>
+</div>
+
+<div class="screen on" id="title"><div class="panel">
+  <div class="logo">PARASITE <em>ECHO</em></div>
+  <div class="tag">生態系擬態 × 食物連鎖サバイバル</div>
+  <div class="tag" style="color:#ffcf80;margin:-8px 0 14px">最初に食物連鎖の頂点《ヒグマ》へ辿り着いた寄生体が勝者</div>
+  <button class="btn" id="bOnline">オンライン対戦</button>
+  <button class="btn" id="bStart">ひとりで遊ぶ（vs AI寄生体）</button><br>
+  <button class="btn green" id="bSoloCoop" style="font-size:14px;padding:8px 20px">ひとりで生態系を育てる</button>
+  <button class="btn sub" id="bHelp">遊び方</button>
+  <button class="btn sub bgmBtn" id="bBgm1">♪ BGM：中</button>
+  <div class="cols" style="margin-top:18px">
+    <div class="card"><h3>喰われて、進化せよ</h3>最弱の寄生幼生として小さな生物に寄生し、上位の捕食者から<b>本気で逃げて</b>アドレナリンを臨界まで高め、<b>あえて喰われて</b>その肉体を乗っ取れ。</div>
+    <div class="card"><h3>寿命と血脈</h3>宿主には寿命がある。老いる前に上位へ乗り換えるか、成熟期に異性と交配し<b>子孫へ乗り移れ</b>。</div>
+    <div class="card"><h3>見分けろ</h3>この森には正体を隠した<b>他の寄生体</b>が潜む。不自然な動きと紫の兆候を観察で見抜け。</div>
+  </div>
+</div></div>
+
+<div class="screen" id="help"><div class="panel">
+  <div class="logo" style="font-size:30px">遊び方</div>
+  <div class="cols">
+    <div class="card"><h3>キーボード / マウス</h3>
+      <span class="k">WASD</span> 移動（カメラの向きが基準）　<span class="k">Shift</span> 擬態歩き<br>
+      <span class="k">右ドラッグ</span>/<span class="k">←→↑↓</span> 視点回転　<span class="k">ホイール</span> ズーム　<span class="k">R</span> 視点リセット<br>
+      <span class="k">J</span>/<span class="k">左クリック</span> 攻撃（長押し：丸呑み・寄生）<br>
+      <span class="k">K</span> 形質スキル　<span class="k">Tab</span> スキル切替<br>
+      <span class="k">L</span> 求愛（長押し）　<span class="k">Space</span> オーバードライブ<br>
+      <span class="k">Q</span> 観察（引きの視点＋名前表示）<br>
+      <span class="k">F</span> 長押し 分身シスト　<span class="k">G</span> 長押し 強制パージ<br>
+      <span class="k">H</span> 詳細HUD　<span class="k">Esc</span> 一時停止<br><span class="k">N</span> マップ　<span class="k">M</span> BGM音量切替</div>
+    <div class="card"><h3>ゲームパッド</h3>
+      左スティック 移動（<b>半倒しで擬態歩き</b>）<br>右スティック 視点回転　<span class="k">R3</span> 視点リセット<br>
+      <span class="k">A</span> 攻撃/丸呑み　<span class="k">X</span> スキル　<span class="k">Y</span> 求愛<br>
+      <span class="k">R2</span> オーバードライブ　<span class="k">L2</span> 観察　<span class="k">LB</span> スキル切替<br>
+      <span class="k">Back</span> マップ　<span class="k">L3</span> 詳細HUD<br>十字<span class="k">↓</span>長押し シスト　十字<span class="k">↑</span>長押し パージ<br><span class="k">Start</span> 一時停止<br>メニューは 十字キー／スティックで選び <span class="k">A</span> 決定・<span class="k">B</span> 戻る。スマホに繋ぐとタッチボタンは自動で隠れる</div>
+    <div class="card"><h3>タッチ</h3>
+      左下のスティックで移動（<b>浅く倒すと擬態歩き</b>）<br>画面をドラッグで視点回転（動くと自動で背後に回り込む）<br>右下のボタンで 攻撃 / 技 / 求愛 / OD<br>右上で 観察・シスト・パージ<br>右の丸い<b>ミニマップ</b>をタップで全体マップ</div>
+    <div class="card"><h3>アドレナリン臨界</h3>捕食者から全力で逃げる・反撃するとアドレナリンが上昇。<b>100%で喰われる</b>と捕食者を乗っ取る（乗っ取れるのは<b>1階層上</b>の捕食者まで。格上すぎる相手には幼生として吐き出される）。不足なら消化されて<b>完全ロスト</b>。棒立ちは病気の個体と見なされ、噛み殺されて幼生に戻される。</div>
+    <div class="card"><h3>体調は画面で読め</h3>HUDはない。<b>赤い脈動</b>＝アドレナリン、<b>色褪せ</b>＝負傷、<b>セピアと白化</b>＝老衰、<b>青い視界の狭まり</b>＝幼生の乾燥。足元の輪は体力（左）とアドレナリン（右）。</div>
+    <div class="card"><h3>勝利条件（頂点争い）</h3>最初に第6階層《ヒグマ》の肉体を奪った寄生体が勝者。オンライン対戦では他のプレイヤーも野生生物に紛れている。完全ロストしても5秒後に幼生から再出発できる。ひとり遊びでは、正体不明のAI寄生体5体と競う。</div>
+    <div class="card"><h3>協力モード（生態系づくり）</h3>痩せた森には小さな生き物しか残っていない。仲間と一緒に繁殖して数を増やそう。交配すると子が3匹生まれ、<b>森の活力</b>が上がって生き物が増えられる上限が広がる。餌が育つと失われた捕食者が森へ戻ってくる。増えすぎた種は狩って調整。全14種の健全度70%を60秒保てば成功。仲間同士は攻撃できない。</div>
+    <div class="card"><h3>水辺の食物連鎖</h3>南の<b>海</b>、森を縫う<b>川</b>、湖、<b>沼の水たまり</b>には水生生物が棲む。メダカ・ヒル→ザリガニ→ナマズ→デンキウナギ→サメ。水生の宿主は水から出られないが、形質『遊泳』を継げば陸の獣でも深海へ潜れる。</div>
+    <div class="card"><h3>キメラ・野良化・シスト</h3>乗り換え時、前の宿主の形質を最大3つ保存。パージや毒沼で剥がれた宿主は<b>野良化したボス</b>として徘徊する。茂みに<b>分身シスト</b>を産めば、ロスト時にそこから再生できる。</div>
+  </div>
+  <button class="btn" id="bHelpBack" data-back>もどる</button>
+</div></div>
+
+<div class="screen" id="lobby"><div class="panel">
+  <div class="logo" style="font-size:30px">オンライン対戦</div>
+  <div class="tag">最初に《ヒグマ》の肉体を奪った寄生体が勝者</div>
+  <div class="card" style="max-width:460px;margin:0 auto 10px;text-align:left">
+    <label>あなたの名前 <input id="nick" maxlength="10" autocomplete="off"></label>
+    <div id="netStatus" style="margin-top:6px;font-size:12px"></div></div>
+  <div id="roomList" class="card" style="max-width:460px;margin:0 auto 10px;text-align:left;min-height:54px"></div>
+  <button class="btn" id="bCreate">対戦ルームを作る</button>
+  <button class="btn green" id="bCreateCoop">協力ルームを作る</button><br>
+  <button class="btn sub" id="bLobbyBack" data-back>もどる</button>
+  <div style="font-size:11px;color:#9a90ab;margin-top:12px;line-height:1.6">このページを同時に開いている人のルームが表示されます。<br>友だちを招くには、このページを共有してください（claude.ai へのログインが必要です）。</div>
+</div></div>
+
+<div class="screen" id="roomscr"><div class="panel">
+  <div class="logo" style="font-size:26px">ルーム <span id="roomCode"></span></div>
+  <div id="roomKind" style="color:#ffcf80;font-size:13px;margin-top:6px"></div>
+  <div id="memberList" class="card" style="max-width:380px;margin:12px auto;text-align:left;font-size:14px;line-height:1.8;min-height:60px"></div>
+  <div id="roomMsg" style="color:#d6c6ef;font-size:13px;margin-bottom:10px"></div>
+  <button class="btn" id="bBegin">開始する</button>
+  <button class="btn sub" id="bLeave" data-back>退出</button>
+</div></div>
+
+<div class="screen" id="result"><div class="panel">
+  <div class="logo" id="resTitle" style="font-size:34px"></div>
+  <div id="resMsg" style="color:#d9c9ee;margin:8px 0 12px"></div>
+  <div id="resRank" class="card" style="text-align:left;margin:0 auto 14px;max-width:420px;font-size:13px;line-height:1.7"></div>
+  <div id="resBtns"></div>
+</div></div>
+
+<div class="screen" id="mapv"><div class="panel">
+  <div class="logo" style="font-size:22px">フィールドマップ</div>
+  <div class="mapBox"><canvas id="mapc"></canvas></div>
+  <div id="mapInfo" class="mapinfo"></div>
+  <div class="mapLegend"><span><i style="background:#ffd04a;border-color:#3a2408;border-radius:2px;transform:rotate(45deg)"></i>あなた（白い扇＝視界の向き）</span><span><i style="background:#fffaf0;border-color:#f2b52a"></i>乗っ取れる捕食者</span><span><i style="background:#fffaf0;border-color:#e04040"></i>ヒグマ（頂点）</span><span><i style="background:#fffaf0;border-color:#6b6b7a"></i>その他の上位種</span><span><i style="background:#7fe6ff;border-color:#1b4a5a"></i>光るキノコ</span><span><i style="background:#b98aff;border-color:#3a1a6a"></i>シスト</span><span><i style="background:#7ff08a;border-color:#14361a"></i>仲間（協力）</span></div>
+  <div style="font-size:11px;color:#cfe0ee;margin-bottom:6px">歩いた場所の霧が晴れていく。目撃した上位種は最後に見た位置に残る。</div>
+  <button class="btn sub" id="bMapClose" data-back>閉じる</button>
+</div></div>
+
+<div class="screen" id="pause"><div class="panel">
+  <div class="logo" style="font-size:32px">PAUSE</div>
+  <div id="pauseRec" class="card" style="text-align:left;margin:14px auto;max-width:420px;font-size:13px;line-height:1.7"></div>
+  <button class="btn" id="bResume">再開</button>
+  <button class="btn sub" id="bHelp2">遊び方</button>
+  <button class="btn sub bgmBtn" id="bBgm2">♪ BGM：中</button>
+  <button class="btn sub" id="bQuit" data-back>タイトルへ</button>
+</div></div>
+
+<div class="screen" id="trait"><div class="panel">
+  <div style="font-size:20px;color:var(--amb)">形質継承 — キメラ化</div>
+  <div id="traitMsg" style="font-size:13px;color:#d6c6ef;margin-top:6px"></div>
+  <div class="tcards" id="traitCards"></div>
+  <button class="btn sub" id="bDiscard">DNAを破棄する</button>
+</div></div>
+
+<div class="screen" id="over"><div class="panel">
+  <div class="logo" style="font-size:36px;color:#ffd0d0" id="overTitle">完全ロスト</div>
+  <div id="overMsg" style="color:#d9c9ee;margin:8px 0 12px"></div>
+  <div id="overRec" class="card" style="text-align:left;margin:0 auto 14px;max-width:420px;font-size:13px;line-height:1.7"></div>
+  <button class="btn" id="bRetry">もう一度寄生する</button>
+  <button class="btn sub" id="bQuit2">タイトルへ</button>
+</div></div>
+
+<div id="loading">生態系を生成中…</div>
+
+<script src="../vendor/three.min.js"></script>
+<script src="game.js"></script>
+</body>
+</html>
